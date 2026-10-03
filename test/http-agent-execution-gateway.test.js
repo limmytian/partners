@@ -140,10 +140,8 @@ test('cancels running jobs through HTTP', async () => {
       event.type === 'job.state' && event.state === JobState.CancelRequested
     )));
 
-    const metricsResponse = await fetch(harness.url('/metrics'));
-    assert.equal(metricsResponse.status, 200);
-    assert.match(
-      await metricsResponse.text(),
+    await waitForMetrics(
+      harness,
       /partners_gateway_jobs_terminal_total\{execution_mode="ephemeral_interpreter",provider="local",state="cancelled"\} 1/,
     );
   } finally {
@@ -711,3 +709,20 @@ async function readSse(url, options = {}) {
     })
     .filter(Boolean);
 }
+
+async function waitForMetrics(harness, regex) {
+  for (let index = 0; index < 50; index += 1) {
+    const response = await fetch(harness.url('/metrics'));
+    if (response.status === 200) {
+      const text = await response.text();
+      if (regex.test(text)) {
+        return text;
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  const finalResponse = await fetch(harness.url('/metrics'));
+  const finalText = await finalResponse.text();
+  assert.match(finalText, regex);
+}
+
