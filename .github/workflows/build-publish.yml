@@ -59,6 +59,7 @@ jobs:
           file: Dockerfile.sandbox
           platforms: linux/amd64,linux/arm64
           push: true
+          provenance: false
           tags: |
             ${{ env.SANDBOX_IMAGE }}:${{ steps.meta.outputs.tag }}
             ${{ env.SANDBOX_IMAGE }}:latest
@@ -72,6 +73,7 @@ jobs:
           file: Dockerfile.gateway
           platforms: linux/amd64,linux/arm64
           push: true
+          provenance: false
           tags: |
             ${{ env.GATEWAY_IMAGE }}:${{ steps.meta.outputs.tag }}
             ${{ env.GATEWAY_IMAGE }}:latest
@@ -85,6 +87,7 @@ jobs:
           file: Dockerfile.console
           platforms: linux/amd64,linux/arm64
           push: true
+          provenance: false
           tags: |
             ${{ env.CONSOLE_IMAGE }}:${{ steps.meta.outputs.tag }}
             ${{ env.CONSOLE_IMAGE }}:latest
