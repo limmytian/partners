@@ -1,0 +1,256 @@
+# Partners Gateway Kubernetes release manifest.
+# Deploy through the repository script so preflight and server-side validation
+# run before apply:
+#   K8S_CONTEXT=<context> GATEWAY_IMAGE_DIGEST=sha256:<digest> \
+#   SANDBOX_IMAGE_DIGEST=sha256:<digest> bash scripts/gateway-release.sh deploy
+#
+# `partners-gateway-secrets` is provisioned externally and is never applied by
+# this manifest. Required keys are:
+#   POSTGRES_URL, GATEWAY_SERVICE_TOKEN, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY,
+#   PARTNERS_K8S_AGENT_SECRET
+
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: partners-juicefs-rustfs
+provisioner: csi.juicefs.com
+parameters:
+  csi.storage.k8s.io/controller-expand-secret-name: juicefs-volume-juicefs
+  csi.storage.k8s.io/controller-expand-secret-namespace: kube-system
+  csi.storage.k8s.io/node-publish-secret-name: juicefs-volume-juicefs
+  csi.storage.k8s.io/node-publish-secret-namespace: kube-system
+  csi.storage.k8s.io/provisioner-secret-name: juicefs-volume-juicefs
+  csi.storage.k8s.io/provisioner-secret-namespace: kube-system
+  pathPattern: "${.pvc.namespace}-${.pvc.name}"
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+
+---
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: partners
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: partners-sandbox
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: partners-gateway
+  namespace: partners
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: partners-sandbox-manager
+  namespace: partners-sandbox
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: partners-sandbox-manager
+  namespace: partners-sandbox
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: partners-sandbox-manager
+subjects:
+  - kind: ServiceAccount
+    name: partners-gateway
+    namespace: partners
+
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: partners-sandbox-quota
+  namespace: partners-sandbox
+spec:
+  hard:
+    pods: "100"
+    requests.cpu: "50"
+    limits.cpu: "50"
+    requests.memory: "100Gi"
+    limits.memory: "100Gi"
+    requests.ephemeral-storage: "500Gi"
+    limits.ephemeral-storage: "500Gi"
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: partners-sandbox-default
+  namespace: partners-sandbox
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: partners
+          podSelector:
+            matchLabels:
+              app: partners-gateway
+      ports:
+        - protocol: TCP
+          port: 8081
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: partners-gateway-config
+  namespace: partners
+data:
+  GATEWAY_PROVIDER: "kubernetes"
+  GATEWAY_HOST: "0.0.0.0"
+  GATEWAY_PORT: "8080"
+  GATEWAY_STORE: "postgres"
+  GATEWAY_ARTIFACT_STORE: "s3"
+  GATEWAY_WORK_ROOT: "/var/lib/partners/workspaces"
+  GATEWAY_ARTIFACT_ROOT: "/var/lib/partners/artifacts"
+  GATEWAY_SERVICE_TOKEN_REF: "partners-gateway"
+  GATEWAY_SERVICE_ACTOR: "partners-gateway"
+  GATEWAY_SERVICE_SCOPES: "*"
+  GATEWAY_TENANT_IDS: "local,default,partners,tw,task-weaver"
+  GATEWAY_POSTGRES_POOL_MAX: "10"
+  GATEWAY_POSTGRES_CONNECT_TIMEOUT_MS: "5000"
+  GATEWAY_POSTGRES_QUERY_TIMEOUT_MS: "30000"
+  S3_ENDPOINT: "http://minio.partners.svc.cluster.local:9000"
+  S3_BUCKET: "partners"
+  S3_REGION: "us-east-1"
+  S3_PREFIX: "gateway-artifacts"
+  PARTNERS_K8S_NAMESPACE: "partners-sandbox"
+  PARTNERS_K8S_SANDBOX_IMAGE: "__SANDBOX_IMAGE__"
+  PARTNERS_K8S_RUNTIME_CLASS: "__RUNTIME_CLASS__"
+  PARTNERS_K8S_SESSION_STORAGE_CLASS: "partners-juicefs-rustfs"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: partners-gateway
+  namespace: partners
+  labels:
+    app: partners-gateway
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: partners-gateway
+  template:
+    metadata:
+      labels:
+        app: partners-gateway
+    spec:
+      serviceAccountName: partners-gateway
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: gateway
+          image: __IMAGE__
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: partners-gateway-config
+            - secretRef:
+                name: partners-gateway-secrets
+          volumeMounts:
+            - name: workspaces
+              mountPath: /var/lib/partners/workspaces
+            - name: artifacts
+              mountPath: /var/lib/partners/artifacts
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: workspaces
+          emptyDir: {}
+        - name: artifacts
+          emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: partners-gateway
+  namespace: partners
+  labels:
+    app: partners-gateway
+spec:
+  type: ClusterIP
+  selector:
+    app: partners-gateway
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

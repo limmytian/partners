@@ -1,0 +1,6 @@
+{{ template "base" . }}
+
+# Named runtime only. The empty RuntimeClass continues to use the default
+# containerd runtime; Pods opt in with runtimeClassName: gvisor.
+[plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.'runsc']
+  runtime_type = "io.containerd.runsc.v1"

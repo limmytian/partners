@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Partners Admin Console</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <span class="brand-title">Partners</span>
+      <span class="badge badge-infra">Admin Console</span>
+    </div>
+    <div class="header-actions">
+      <div class="status-indicator">
+        <span id="status-dot" class="status-dot"></span>
+        <span id="status-text">Connecting...</span>
+      </div>
+      <button id="refresh-btn" title="Refresh Current View">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+        </svg>
+        Refresh
+      </button>
+      <button id="settings-btn" title="Configure Gateway & Token">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+        Settings
+      </button>
+    </div>
+  </header>
+
+  <nav class="nav-bar">
+    <div class="nav-item active" data-tab="overview">Overview</div>
+    <div class="nav-item" data-tab="audit">Audit Records</div>
+    <div class="nav-item" data-tab="jobs">Jobs Explorer</div>
+    <div class="nav-item" data-tab="sessions">Sessions Explorer</div>
+    <div class="nav-item" data-tab="idempotency">Idempotency Keys</div>
+  </nav>
+
+  <main>
+    <!-- 1. Overview Section -->
+    <section id="view-overview" class="view-section active">
+      <div class="grid-cards">
+        <div class="card">
+          <div class="card-title">Active Running Jobs</div>
+          <div id="stat-running-jobs" class="card-value">-</div>
+          <div id="stat-total-jobs" class="card-subtext">Total jobs: -</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Active Sessions</div>
+          <div id="stat-active-sessions" class="card-value">-</div>
+          <div id="stat-total-sessions" class="card-subtext">Total sessions: -</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Gateway Uptime</div>
+          <div id="stat-uptime" class="card-value">-</div>
+          <div class="card-subtext">Process uptime</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Postgres Pool</div>
+          <div id="stat-db-pool" class="card-value">-</div>
+          <div id="stat-db-pool-sub" class="card-subtext">Idle / Waiting</div>
+        </div>
+      </div>
+
+      <div class="table-container">
+        <div class="table-header-tools">
+          <div class="table-title">Recent Running & Preparing Jobs</div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Job ID</th>
+              <th>Mode</th>
+              <th>Tenant / Project</th>
+              <th>State</th>
+              <th>Created</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="overview-recent-jobs">
+            <tr><td colspan="6" style="text-align:center; color: var(--text-muted);">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 2. Audit Records Section -->
+    <section id="view-audit" class="view-section">
+      <div class="table-container">
+        <div class="table-header-tools">
+          <div class="table-title">Infrastructure Authorization & Access Audit Trail</div>
+          <div class="table-filters">
+            <select id="audit-outcome-filter">
+              <option value="">All Outcomes</option>
+              <option value="accepted">Accepted</option>
+              <option value="denied">Denied</option>
+            </select>
+            <input type="text" id="audit-actor-filter" placeholder="Filter by actor...">
+          </div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Action</th>
+              <th>Outcome</th>
+              <th>Scope</th>
+              <th>Actor</th>
+              <th>Token Ref</th>
+              <th>Reason</th>
+            </tr>
+          </thead>
+          <tbody id="audit-table-body">
+            <tr><td colspan="7" style="text-align:center; color: var(--text-muted);">Loading audit records...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 3. Jobs Explorer Section -->
+    <section id="view-jobs" class="view-section">
+      <div class="table-container">
+        <div class="table-header-tools">
+          <div class="table-title">Jobs Explorer</div>
+          <div class="table-filters">
+            <select id="jobs-state-filter">
+              <option value="">All States</option>
+              <option value="running">Running</option>
+              <option value="queued">Queued</option>
+              <option value="preparing">Preparing</option>
+              <option value="succeeded">Succeeded</option>
+              <option value="failed">Failed</option>
+              <option value="timed_out">Timed Out</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+            <input type="text" id="jobs-tenant-filter" placeholder="Tenant ID...">
+          </div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Job ID</th>
+              <th>State</th>
+              <th>Mode</th>
+              <th>Tenant / Project</th>
+              <th>Exit Code</th>
+              <th>Created At</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="jobs-table-body">
+            <tr><td colspan="7" style="text-align:center; color: var(--text-muted);">Loading jobs...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 4. Sessions Explorer Section -->
+    <section id="view-sessions" class="view-section">
+      <div class="table-container">
+        <div class="table-header-tools">
+          <div class="table-title">Workspace Sessions Explorer</div>
+          <div class="table-filters">
+            <select id="sessions-state-filter">
+              <option value="">All States</option>
+              <option value="ready">Ready</option>
+              <option value="busy">Busy</option>
+              <option value="provisioning">Provisioning</option>
+              <option value="stopped">Stopped</option>
+              <option value="failed">Failed</option>
+            </select>
+          </div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Session ID</th>
+              <th>State</th>
+              <th>Provider</th>
+              <th>Tenant / Project</th>
+              <th>Created At</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="sessions-table-body">
+            <tr><td colspan="6" style="text-align:center; color: var(--text-muted);">Loading sessions...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 5. Idempotency Keys Section -->
+    <section id="view-idempotency" class="view-section">
+      <div class="table-container">
+        <div class="table-header-tools">
+          <div class="table-title">Recorded Idempotency Keys & Hashes</div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Idempotency Key</th>
+              <th>Tenant</th>
+              <th>Scope</th>
+              <th>Request Hash</th>
+              <th>Resource ID</th>
+              <th>Created At</th>
+            </tr>
+          </thead>
+          <tbody id="idempotency-table-body">
+            <tr><td colspan="6" style="text-align:center; color: var(--text-muted);">Loading idempotency keys...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- Settings Modal -->
+  <div id="settings-modal" class="modal-backdrop">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div class="modal-title">Admin Console Settings</div>
+        <button id="close-settings" class="btn-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="cfg-gateway-url">Gateway API URL (Direct or /api/proxy)</label>
+          <input type="text" id="cfg-gateway-url" placeholder="e.g. http://localhost:8080 or /api/proxy">
+        </div>
+        <div class="form-group">
+          <label for="cfg-admin-token">Admin Bearer Token (requires admin:read, admin:operate)</label>
+          <input type="text" id="cfg-admin-token" placeholder="Bearer token...">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="save-settings-btn" class="primary">Save Configuration</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Live Job Stream & Artifacts Modal -->
+  <div id="job-modal" class="modal-backdrop">
+    <div class="modal-dialog" style="max-width: 900px;">
+      <div class="modal-header">
+        <div class="modal-title">Job Event Stream: <span id="modal-job-id" class="mono"></span></div>
+        <button id="close-job-modal" class="btn-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="terminal-window" id="terminal-output"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="clear-terminal-btn">Clear</button>
+        <button id="close-job-modal-btn" class="primary">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirm Action Modal -->
+  <div id="confirm-modal" class="modal-backdrop">
+    <div class="modal-dialog" style="max-width: 500px;">
+      <div class="modal-header">
+        <div id="confirm-title" class="modal-title">Confirm Action</div>
+        <button id="close-confirm-modal" class="btn-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p id="confirm-message">Are you sure you want to perform this operation?</p>
+      </div>
+      <div class="modal-footer">
+        <button id="cancel-confirm-btn">Cancel</button>
+        <button id="execute-confirm-btn" class="danger">Confirm & Execute</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

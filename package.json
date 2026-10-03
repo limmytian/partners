@@ -1,0 +1,29 @@
+{
+  "name": "partners",
+  "version": "0.1.0",
+  "description": "Provider-agnostic execution gateway and sandboxes for AI agents",
+  "license": "Apache-2.0",
+  "author": "limmytian <limmytian@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/limmytian/partners.git"
+  },
+  "homepage": "https://github.com/limmytian/partners#readme",
+  "type": "module",
+  "scripts": {
+    "gateway:cleanup": "node scripts/gateway-retention-cleanup.mjs",
+    "gateway:ci-smoke": "bash scripts/gateway-release.sh compose-smoke",
+    "gateway:release": "bash scripts/gateway-release.sh release",
+    "gateway:service": "node scripts/gateway-service.mjs",
+    "gateway:smoke": "node scripts/gateway-smoke.mjs",
+    "gateway:token": "node scripts/gateway-token.mjs",
+    "console:service": "node console/server.mjs",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "pg": "^8.22.0"
+  }
+}

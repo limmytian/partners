@@ -1,0 +1,690 @@
+openapi: 3.1.0
+info:
+  title: Agent Execution Gateway API
+  version: 0.1.0
+  description: Provider-neutral API for sandbox sessions, jobs, events, and artifacts.
+servers:
+  - url: https://gateway.example.com
+    description: Production placeholder
+security:
+  - bearerAuth: []
+tags:
+  - name: Sessions
+  - name: Jobs
+  - name: Artifacts
+paths:
+  /v1/sessions:
+    post:
+      tags: [Sessions]
+      summary: Create a workspace session
+      operationId: createSession
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSessionRequest'
+      responses:
+        '202':
+          description: Session accepted for provisioning
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /v1/sessions/{sessionId}:
+    get:
+      tags: [Sessions]
+      summary: Get a session
+      operationId: getSession
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '200':
+          description: Session details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Sessions]
+      summary: Delete a session
+      operationId: deleteSession
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '202':
+          description: Session deletion accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+  /v1/sessions/{sessionId}/stop:
+    post:
+      tags: [Sessions]
+      summary: Stop a workspace session
+      operationId: stopSession
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '202':
+          description: Stop accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+  /v1/sessions/{sessionId}/archive:
+    post:
+      tags: [Sessions]
+      summary: Archive a stopped workspace session
+      operationId: archiveSession
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '202':
+          description: Archive accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+  /v1/jobs:
+    post:
+      tags: [Jobs]
+      summary: Submit a sandbox job
+      operationId: createJob
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateJobRequest'
+      responses:
+        '202':
+          description: Job accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /v1/jobs/{jobId}:
+    get:
+      tags: [Jobs]
+      summary: Get a job
+      operationId: getJob
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: Job details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/jobs/{jobId}/cancel:
+    post:
+      tags: [Jobs]
+      summary: Cancel a job
+      operationId: cancelJob
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        '202':
+          description: Cancellation accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+  /v1/jobs/{jobId}/events:
+    get:
+      tags: [Jobs]
+      summary: Stream job events
+      operationId: streamJobEvents
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+        - name: Last-Event-ID
+          in: header
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Server-sent event stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+  /v1/jobs/{jobId}/artifacts:
+    get:
+      tags: [Artifacts]
+      summary: List job artifacts
+      operationId: listJobArtifacts
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: Artifact list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Artifact'
+  /v1/artifacts/{artifactId}/download:
+    get:
+      tags: [Artifacts]
+      summary: Download an artifact
+      operationId: downloadArtifact
+      parameters:
+        - $ref: '#/components/parameters/ArtifactId'
+      responses:
+        '302':
+          description: Redirect to a short-lived signed URL
+          headers:
+            Location:
+              schema:
+                type: string
+                format: uri
+        '200':
+          description: Artifact bytes for local or directly served backends
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '501':
+          description: Artifact exists but the backend has no download URL or byte-serving handler
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: Replays accepted create requests within the same route, tenant, and project scope. Keys must be 8-200 characters using letters, digits, '.', '_', '~', ':', or '-'.
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 200
+        pattern: '^[A-Za-z0-9._~:-]+$'
+    SessionId:
+      name: sessionId
+      in: path
+      required: true
+      schema:
+        type: string
+    JobId:
+      name: jobId
+      in: path
+      required: true
+      schema:
+        type: string
+    ArtifactId:
+      name: artifactId
+      in: path
+      required: true
+      schema:
+        type: string
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    CreateSessionRequest:
+      type: object
+      required: [tenantId, projectId]
+      properties:
+        tenantId:
+          type: string
+        projectId:
+          type: string
+        provider:
+          type: string
+          default: auto
+        snapshot:
+          type: string
+        sandbox:
+          $ref: '#/components/schemas/SandboxConfig'
+        repository:
+          $ref: '#/components/schemas/RepositorySpec'
+        resources:
+          $ref: '#/components/schemas/ResourceSpec'
+        persistence:
+          $ref: '#/components/schemas/PersistencePolicy'
+        network:
+          $ref: '#/components/schemas/NetworkPolicy'
+        metadata:
+          type: object
+          additionalProperties: true
+    CreateJobRequest:
+      type: object
+      required: [executionMode, timeoutSeconds]
+      properties:
+        executionMode:
+          $ref: '#/components/schemas/ExecutionMode'
+        tenantId:
+          type: string
+        projectId:
+          type: string
+        sessionId:
+          type: string
+        sandbox:
+          $ref: '#/components/schemas/SandboxConfig'
+        provider:
+          type: string
+          default: auto
+        snapshot:
+          type: string
+        sandbox:
+          $ref: '#/components/schemas/SandboxConfig'
+        command:
+          $ref: '#/components/schemas/CommandSpec'
+        code:
+          $ref: '#/components/schemas/CodeSpec'
+        inputs:
+          $ref: '#/components/schemas/InputSpec'
+        resources:
+          $ref: '#/components/schemas/ResourceSpec'
+        timeoutSeconds:
+          type: integer
+          minimum: 1
+          maximum: 86400
+        network:
+          $ref: '#/components/schemas/NetworkPolicy'
+        credentialRefs:
+          type: array
+          items:
+            type: string
+        artifactPolicy:
+          $ref: '#/components/schemas/ArtifactPolicy'
+        metadata:
+          type: object
+          additionalProperties: true
+    Session:
+      type: object
+      required: [id, state, executionMode, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        state:
+          $ref: '#/components/schemas/SessionState'
+        executionMode:
+          const: workspace_session
+        provider:
+          type: string
+        providerSessionId:
+          type: string
+        resources:
+          $ref: '#/components/schemas/ResourceSpec'
+        persistence:
+          $ref: '#/components/schemas/PersistencePolicy'
+        sandbox:
+          $ref: '#/components/schemas/SandboxConfig'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    Job:
+      type: object
+      required: [id, state, executionMode, timeoutSeconds, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        state:
+          $ref: '#/components/schemas/JobState'
+        executionMode:
+          $ref: '#/components/schemas/ExecutionMode'
+        sessionId:
+          type: string
+        provider:
+          type: string
+        providerJobId:
+          type: string
+        timeoutSeconds:
+          type: integer
+        exitCode:
+          type:
+            - integer
+            - 'null'
+        terminalReason:
+          type:
+            - string
+            - 'null'
+        artifactCount:
+          type: integer
+          default: 0
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type:
+            - string
+            - 'null'
+          format: date-time
+    Artifact:
+      type: object
+      required: [id, jobId, kind, name, sizeBytes, createdAt]
+      properties:
+        id:
+          type: string
+        jobId:
+          type: string
+        kind:
+          $ref: '#/components/schemas/ArtifactKind'
+        name:
+          type: string
+        contentType:
+          type: string
+        sizeBytes:
+          type: integer
+          minimum: 0
+        sha256:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    ExecutionMode:
+      type: string
+      enum:
+        - ephemeral_interpreter
+        - workspace_session
+    SessionState:
+      type: string
+      enum:
+        - queued
+        - provisioning
+        - ready
+        - busy
+        - stopping
+        - stopped
+        - starting
+        - archiving
+        - archived
+        - deleting
+        - deleted
+        - failed
+    JobState:
+      type: string
+      enum:
+        - queued
+        - preparing
+        - running
+        - cancel_requested
+        - cancelled
+        - succeeded
+        - failed
+        - timed_out
+    ArtifactKind:
+      type: string
+      enum:
+        - stdout
+        - stderr
+        - log
+        - file
+        - directory_archive
+        - patch
+        - test_report
+        - coverage
+        - screenshot
+        - metadata
+    ResourceSpec:
+      type: object
+      properties:
+        cpu:
+          type: number
+          minimum: 0.125
+        memoryGiB:
+          type: number
+          minimum: 0.125
+        diskGiB:
+          type: number
+          minimum: 1
+    SandboxConfig:
+      type: object
+      additionalProperties: false
+      description: >-
+        Optional per-session or per-job sandbox profile. Omit it to retain the
+        provider default image and behavior. Raw registry credentials, tokens,
+        passwords, and private keys are never accepted; imagePullSecretRef is a
+        server-side reference only.
+      properties:
+        profile:
+          type: string
+          pattern: '^[a-z0-9][a-z0-9._-]{0,63}$'
+          description: Server-side profile identifier resolved by policy.
+        image:
+          type: string
+          pattern: '^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?(?::[0-9]+)?/[a-z0-9][a-z0-9._/-]*@sha256:[a-f0-9]{64}$'
+          description: Organization-allowlisted image pinned by immutable digest.
+        imagePullSecretRef:
+          type: string
+          pattern: '^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$'
+          description: >-
+            Platform-owned secret reference. The request must not contain the
+            Secret value, bearer token, registry JSON, or private key.
+        imagePullPolicy:
+          type: string
+          enum: [Always, IfNotPresent, Never]
+          default: IfNotPresent
+          description: Kubernetes pull policy selected by the authorized profile.
+        architecture:
+          type: string
+          enum: [amd64, arm64, arm, ppc64le, s390x]
+          description: Optional Kubernetes node architecture selector.
+        agentContract:
+          $ref: '#/components/schemas/SandboxAgentContract'
+        init:
+          $ref: '#/components/schemas/SandboxInitSpec'
+    SandboxAgentContract:
+      type: object
+      additionalProperties: false
+      description: >-
+        Optional assertions for the standard sandbox-agent contract. Custom
+        images must still expose these endpoints and paths even when omitted.
+      properties:
+        port:
+          type: integer
+          const: 8081
+        workspacePath:
+          type: string
+          const: /workspace
+    SandboxInitSpec:
+      type: object
+      additionalProperties: false
+      description: >-
+        Bootstrap applied after the sandbox-agent health check and before the
+        user's command. A session records its init version/idempotency key and
+        does not repeat an already successful init on restart.
+      properties:
+        files:
+          type: array
+          maxItems: 64
+          items:
+            $ref: '#/components/schemas/SandboxInitFile'
+        argv:
+          type: array
+          minItems: 1
+          maxItems: 64
+          items:
+            type: string
+            minLength: 1
+            maxLength: 4096
+        env:
+          type: object
+          additionalProperties:
+            type: string
+            maxLength: 16384
+          propertyNames:
+            pattern: '^[A-Za-z_][A-Za-z0-9_]*$'
+        timeoutSeconds:
+          type: integer
+          minimum: 1
+          maximum: 900
+        idempotencyKey:
+          type: string
+          minLength: 8
+          maxLength: 200
+          pattern: '^[A-Za-z0-9._~:-]+$'
+        version:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: '^[A-Za-z0-9._-]+$'
+    SandboxInitFile:
+      type: object
+      additionalProperties: false
+      required: [path]
+      properties:
+        path:
+          type: string
+          pattern: '^/workspace(?:/[^/\\]+)*$'
+          description: Absolute path constrained to /workspace and without '..'.
+        content:
+          type: string
+          maxLength: 4194304
+        contentBase64:
+          type: string
+          maxLength: 6291456
+      oneOf:
+        - required: [content]
+        - required: [contentBase64]
+    PersistencePolicy:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum: [ephemeral, stopped, archived, external_storage]
+          default: ephemeral
+        retentionSeconds:
+          type: integer
+          minimum: 0
+    NetworkPolicy:
+      type: object
+      properties:
+        outbound:
+          type: string
+          enum: [deny_all, allow_all, allowlist]
+          default: allowlist
+        allowedHosts:
+          type: array
+          items:
+            type: string
+        previewPorts:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+            maximum: 65535
+    RepositorySpec:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+        branch:
+          type: string
+        commit:
+          type: string
+        credentialRef:
+          type: string
+    CommandSpec:
+      type: object
+      required: [argv]
+      properties:
+        argv:
+          type: array
+          minItems: 1
+          items:
+            type: string
+        cwd:
+          type: string
+        env:
+          type: object
+          additionalProperties:
+            type: string
+    CodeSpec:
+      type: object
+      required: [language, source]
+      properties:
+        language:
+          type: string
+          enum: [python, javascript, typescript, shell]
+        source:
+          type: string
+    InputSpec:
+      type: object
+      properties:
+        files:
+          type: array
+          items:
+            type: object
+            required: [path]
+            properties:
+              path:
+                type: string
+              contentBase64:
+                type: string
+              artifactRef:
+                type: string
+    ArtifactPolicy:
+      type: object
+      properties:
+        collect:
+          type: array
+          items:
+            type: string
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+        details:
+          type: object
+          additionalProperties: true

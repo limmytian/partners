@@ -1,0 +1,28 @@
+ARG NODE_IMAGE=node:22-slim
+
+FROM ${NODE_IMAGE} AS runner
+ARG IMAGE_TAG=local
+ARG VCS_REF=unknown
+ARG BUILD_DATE=unknown
+
+LABEL org.opencontainers.image.title="Partners Admin Console" \
+  org.opencontainers.image.description="Independent web management and operational dashboard for Partners" \
+  org.opencontainers.image.version="${IMAGE_TAG}" \
+  org.opencontainers.image.revision="${VCS_REF}" \
+  org.opencontainers.image.created="${BUILD_DATE}" \
+  org.opencontainers.image.source="https://github.com/limmytian/partners"
+
+WORKDIR /app
+ENV NODE_ENV=production \
+  CONSOLE_HOST=0.0.0.0 \
+  CONSOLE_PORT=3000 \
+  GATEWAY_URL=http://partners-gateway:8080
+
+COPY console ./console
+
+USER node
+EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+CMD ["node", "console/server.mjs"]

@@ -1,0 +1,18 @@
+ARG NODE_IMAGE=node:20-alpine
+FROM ${NODE_IMAGE}
+
+ENV NODE_ENV=production \
+    SANDBOX_AGENT_HOST=0.0.0.0 \
+    SANDBOX_AGENT_PORT=8081 \
+    SANDBOX_WORKSPACE=/workspace
+
+RUN apk add --no-cache bash ca-certificates git python3 py3-pip \
+  && mkdir -p /workspace \
+  && chown -R node:node /workspace
+
+WORKDIR /app
+COPY src/sandbox-agent/server.mjs ./server.mjs
+
+USER node
+EXPOSE 8081
+CMD ["node", "/app/server.mjs"]
