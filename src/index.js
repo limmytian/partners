@@ -13,6 +13,7 @@ export * from './jobs/one-shot-interpreter.js';
 export * from './security/git-credentials.js';
 export * from './security/gateway-service-auth.js';
 export * from './security/gateway-token-operations.js';
+export * from './security/workspace-security.js';
 export * from './workspaces/workspace-artifacts.js';
 export * from './providers/local-sandbox-provider.js';
 export * from './providers/kubernetes-api.js';
