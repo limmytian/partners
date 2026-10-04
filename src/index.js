@@ -1,4 +1,5 @@
 export * from './core/provider-contract.js';
+export * from './core/e2b-protocol-adapter.js';
 export * from './artifacts/artifact-retention.js';
 export * from './artifacts/local-artifact-store.js';
 export * from './artifacts/s3-artifact-store.js';
