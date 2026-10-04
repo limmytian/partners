@@ -56,6 +56,14 @@ export class CubeSandboxProvider {
     const startTime = performance.now();
     const workspacePath = await mkdtemp(path.join(this.rootDir, 'cubesandbox-session-'));
 
+    if (request.snapshotId) {
+      const snapshot = this.snapshots.get(request.snapshotId);
+      if (!snapshot) {
+        throw new Error(`Snapshot not found: ${request.snapshotId}`);
+      }
+      await cp(snapshot.snapshotPath, workspacePath, { recursive: true });
+    }
+
     // MicroVM specific isolation metadata
     const microVmMeta = {
       vmId: `vm_${randomUUID().slice(0, 8)}`,
@@ -63,6 +71,7 @@ export class CubeSandboxProvider {
       isolation: 'hardware_virtualization_kvm',
       coldStartMs: Number((performance.now() - startTime).toFixed(2)),
       cowRoot: workspacePath,
+      ...(request.snapshotId ? { restoredFromSnapshot: request.snapshotId } : {}),
     };
 
     this.metrics.coldStartCount += 1;
@@ -137,6 +146,16 @@ export class CubeSandboxProvider {
     this.metrics.snapshotCount += 1;
 
     return snapshotRecord;
+  }
+
+  async getSnapshot(snapshotId) {
+    const snapshot = this.snapshots.get(snapshotId);
+    return snapshot ? { ...snapshot } : null;
+  }
+
+  async listSnapshots({ sessionId = null } = {}) {
+    const all = [...this.snapshots.values()];
+    return sessionId ? all.filter((s) => s.sessionId === sessionId) : all;
   }
 
   /**

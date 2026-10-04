@@ -297,6 +297,16 @@ async function routeRequest({ req, res, gateway, authorizer, eventBus, runningJo
     if (req.method === 'POST' && ['stop', 'archive'].includes(segments[3])) {
       return sendJson(res, 501, { error: `${segments[3]} session is not implemented yet` });
     }
+    if (req.method === 'POST' && segments[3] === 'snapshots') {
+      const session = await gateway.getSession(sessionId);
+      if (!session) {
+        return sendJson(res, 404, { error: 'Session not found' });
+      }
+      const body = await readJson(req, { allowEmpty: true });
+      await authorize({ req, authorizer, scope: 'snapshots:create', resource: session, body });
+      const snapshot = await gateway.createSessionSnapshot(sessionId, body);
+      return sendJson(res, 201, snapshot);
+    }
     if (req.method === 'POST' && (segments[3] === 'pty' || segments[3] === 'shell')) {
       const session = await gateway.getSession(sessionId);
       if (!session) {
@@ -313,6 +323,53 @@ async function routeRequest({ req, res, gateway, authorizer, eventBus, runningJo
         cols: body.cols ?? 80,
         rows: body.rows ?? 24,
       });
+    }
+  }
+
+  if (segments[1] === 'snapshots') {
+    if (req.method === 'GET' && segments.length === 2) {
+      await authorize({ req, authorizer, scope: 'snapshots:read' });
+      const sessionId = url.searchParams.get('sessionId') || undefined;
+      const tenantId = url.searchParams.get('tenantId') || undefined;
+      const projectId = url.searchParams.get('projectId') || undefined;
+      const limit = Number.parseInt(url.searchParams.get('limit') || '50', 10);
+      const offset = Number.parseInt(url.searchParams.get('offset') || '0', 10);
+      const items = (await gateway.listSnapshots?.({ sessionId, tenantId, projectId, limit, offset })) ?? [];
+      return sendJson(res, 200, { items, limit, offset });
+    }
+    if (req.method === 'GET' && segments.length === 3) {
+      const snapshot = await gateway.getSnapshot?.(segments[2]);
+      if (snapshot) {
+        await authorize({ req, authorizer, scope: 'snapshots:read', resource: snapshot });
+        return sendJson(res, 200, snapshot);
+      }
+      return sendJson(res, 404, { error: 'Snapshot not found' });
+    }
+  }
+
+  if (segments[1] === 'templates') {
+    if (req.method === 'POST' && segments.length === 2) {
+      const body = await readJson(req);
+      const auth = await authorize({ req, authorizer, scope: 'templates:create', body });
+      const template = await gateway.createTemplate(withAuthContext(body, auth));
+      return sendJson(res, 201, template);
+    }
+    if (req.method === 'GET' && segments.length === 2) {
+      await authorize({ req, authorizer, scope: 'templates:read' });
+      const tenantId = url.searchParams.get('tenantId') || undefined;
+      const projectId = url.searchParams.get('projectId') || undefined;
+      const limit = Number.parseInt(url.searchParams.get('limit') || '50', 10);
+      const offset = Number.parseInt(url.searchParams.get('offset') || '0', 10);
+      const items = (await gateway.listTemplates?.({ tenantId, projectId, limit, offset })) ?? [];
+      return sendJson(res, 200, { items, limit, offset });
+    }
+    if (req.method === 'GET' && segments.length === 3) {
+      const template = await gateway.getTemplate?.(segments[2]);
+      if (template) {
+        await authorize({ req, authorizer, scope: 'templates:read', resource: template });
+        return sendJson(res, 200, template);
+      }
+      return sendJson(res, 404, { error: 'Template not found' });
     }
   }
 

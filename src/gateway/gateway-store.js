@@ -8,6 +8,8 @@ export class InMemoryGatewayStore {
     this.artifacts = new Map();
     this.cancellations = new Map();
     this.idempotencyKeys = new Map();
+    this.snapshots = new Map();
+    this.templates = new Map();
     this.auditRecords = [];
     this.sequence = 0;
   }
@@ -134,6 +136,43 @@ export class InMemoryGatewayStore {
     let list = [...this.idempotencyKeys.values()].sort((a, b) => new Date(b.createdAt ?? 0) - new Date(a.createdAt ?? 0));
     if (options.tenantId) list = list.filter((k) => k.tenantId === options.tenantId);
     if (options.scope) list = list.filter((k) => k.scope === options.scope);
+    const offset = options.offset ?? 0;
+    const limit = options.limit ?? list.length;
+    return list.slice(offset, offset + limit).map(clone);
+  }
+
+  saveSnapshot(snapshot) {
+    this.snapshots.set(snapshot.id, clone(snapshot));
+    return clone(snapshot);
+  }
+
+  getSnapshot(snapshotId) {
+    return clone(this.snapshots.get(snapshotId));
+  }
+
+  listSnapshots(options = {}) {
+    let list = [...this.snapshots.values()].sort((a, b) => new Date(b.createdAt ?? 0) - new Date(a.createdAt ?? 0));
+    if (options.tenantId) list = list.filter((s) => s.tenantId === options.tenantId);
+    if (options.projectId) list = list.filter((s) => s.projectId === options.projectId);
+    if (options.sessionId) list = list.filter((s) => s.sessionId === options.sessionId);
+    const offset = options.offset ?? 0;
+    const limit = options.limit ?? list.length;
+    return list.slice(offset, offset + limit).map(clone);
+  }
+
+  saveTemplate(template) {
+    this.templates.set(template.id, clone(template));
+    return clone(template);
+  }
+
+  getTemplate(templateId) {
+    return clone(this.templates.get(templateId));
+  }
+
+  listTemplates(options = {}) {
+    let list = [...this.templates.values()].sort((a, b) => new Date(b.createdAt ?? 0) - new Date(a.createdAt ?? 0));
+    if (options.tenantId) list = list.filter((t) => t.tenantId === options.tenantId);
+    if (options.projectId) list = list.filter((t) => t.projectId === options.projectId);
     const offset = options.offset ?? 0;
     const limit = options.limit ?? list.length;
     return list.slice(offset, offset + limit).map(clone);

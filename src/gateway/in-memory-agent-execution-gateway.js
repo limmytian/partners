@@ -41,7 +41,23 @@ export class InMemoryAgentExecutionGateway {
 
     assertSandboxConfiguration(request.sandbox);
 
-    const session = await this.provider.createSession(request);
+    let snapshotId = request.snapshotId ?? null;
+    let templateId = request.templateId ?? null;
+
+    if (templateId) {
+      const template = await this.getTemplate(templateId);
+      if (!template) {
+        throw Object.assign(new Error(`Template not found: ${templateId}`), { statusCode: 404 });
+      }
+      snapshotId = template.snapshotId;
+    }
+
+    const providerRequest = {
+      ...request,
+      ...(snapshotId ? { snapshotId } : {}),
+    };
+
+    const session = await this.provider.createSession(providerRequest);
     const now = this.#now();
     const record = {
       ...session,
@@ -49,12 +65,89 @@ export class InMemoryAgentExecutionGateway {
       provider: session.provider ?? this.provider.name,
       tenantId: request.tenantId ?? session.tenantId ?? null,
       projectId: request.projectId ?? session.projectId ?? null,
+      snapshotId: snapshotId ?? session.snapshotId ?? null,
+      templateId: templateId ?? null,
       createdAt: session.createdAt ?? now,
       updatedAt: session.updatedAt ?? now,
       metadata: request.metadata ?? {},
       actor: request.actor ?? null,
     };
     return this.store.saveSession(record);
+  }
+
+  async createSessionSnapshot(sessionId, { label = 'default', metadata = {} } = {}) {
+    const session = await this.getSession(sessionId);
+    if (!session) {
+      throw Object.assign(new Error(`Session not found: ${sessionId}`), { statusCode: 404 });
+    }
+    if (!this.provider.createSnapshot) {
+      throw Object.assign(new Error('Provider does not support snapshot creation'), { statusCode: 501 });
+    }
+
+    const providerSnapshot = await this.provider.createSnapshot(sessionId, { label });
+    const now = this.#now();
+    const record = {
+      id: providerSnapshot.id,
+      sessionId,
+      label: providerSnapshot.label ?? label,
+      tenantId: session.tenantId ?? null,
+      projectId: session.projectId ?? null,
+      provider: this.provider.name,
+      snapshotPath: providerSnapshot.snapshotPath ?? null,
+      metadata,
+      createdAt: providerSnapshot.createdAt ?? now,
+    };
+    return this.store.saveSnapshot(record);
+  }
+
+  async getSnapshot(snapshotId) {
+    const stored = await this.store.getSnapshot(snapshotId);
+    if (stored) return stored;
+    if (this.provider.getSnapshot) {
+      return this.provider.getSnapshot(snapshotId);
+    }
+    return null;
+  }
+
+  async listSnapshots(options = {}) {
+    return this.store.listSnapshots(options);
+  }
+
+  async createTemplate({ name, snapshotId, description = '', metadata = {}, tenantId = null, projectId = null, actor = null } = {}) {
+    if (!name) {
+      throw Object.assign(new Error('Template name is required'), { statusCode: 400 });
+    }
+    if (!snapshotId) {
+      throw Object.assign(new Error('Template snapshotId is required'), { statusCode: 400 });
+    }
+    const snapshot = await this.getSnapshot(snapshotId);
+    if (!snapshot) {
+      throw Object.assign(new Error(`Snapshot not found: ${snapshotId}`), { statusCode: 404 });
+    }
+
+    const templateId = `tpl_${randomUUID()}`;
+    const now = this.#now();
+    const record = {
+      id: templateId,
+      name,
+      snapshotId,
+      description,
+      tenantId: tenantId ?? snapshot.tenantId ?? null,
+      projectId: projectId ?? snapshot.projectId ?? null,
+      metadata,
+      actor,
+      createdAt: now,
+      updatedAt: now,
+    };
+    return this.store.saveTemplate(record);
+  }
+
+  async getTemplate(templateId) {
+    return this.store.getTemplate(templateId);
+  }
+
+  async listTemplates(options = {}) {
+    return this.store.listTemplates(options);
   }
 
   async getSession(sessionId) {

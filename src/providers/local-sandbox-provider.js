@@ -27,6 +27,7 @@ export class LocalSandboxProvider {
   constructor(options = {}) {
     this.rootDir = options.rootDir ?? tmpdir();
     this.sessions = new Map();
+    this.snapshots = new Map();
     this.abortControllers = new Map();
     this.sequence = 0;
   }
@@ -35,6 +36,16 @@ export class LocalSandboxProvider {
     assertSandboxConfiguration(request.sandbox);
     const id = request.id ?? `ses_${randomUUID()}`;
     const workspacePath = await mkdtemp(path.join(this.rootDir, 'partners-session-'));
+
+    // If restoring from snapshot
+    if (request.snapshotId) {
+      const snapshot = this.snapshots.get(request.snapshotId);
+      if (!snapshot) {
+        throw new Error(`Snapshot not found: ${request.snapshotId}`);
+      }
+      await cp(snapshot.snapshotPath, workspacePath, { recursive: true });
+    }
+
     const session = {
       id,
       state: SessionState.Ready,
@@ -43,6 +54,7 @@ export class LocalSandboxProvider {
       workspacePath,
       resources: request.resources ?? {},
       persistence: request.persistence ?? { kind: 'stopped' },
+      ...(request.snapshotId ? { snapshotId: request.snapshotId } : {}),
       ...(request.sandbox ? { sandbox: request.sandbox } : {}),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -50,6 +62,39 @@ export class LocalSandboxProvider {
 
     this.sessions.set(id, session);
     return { ...session };
+  }
+
+  async createSnapshot(sessionId, { label = 'default' } = {}) {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+
+    const snapshotId = `snap_${randomUUID()}`;
+    const snapshotPath = path.join(this.rootDir, `partners-snap-${snapshotId}`);
+    await mkdir(snapshotPath, { recursive: true });
+    await cp(session.workspacePath, snapshotPath, { recursive: true });
+
+    const snapshotRecord = {
+      id: snapshotId,
+      sessionId,
+      label,
+      snapshotPath,
+      createdAt: new Date().toISOString(),
+    };
+
+    this.snapshots.set(snapshotId, snapshotRecord);
+    return snapshotRecord;
+  }
+
+  async getSnapshot(snapshotId) {
+    const snapshot = this.snapshots.get(snapshotId);
+    return snapshot ? { ...snapshot } : null;
+  }
+
+  async listSnapshots({ sessionId = null } = {}) {
+    const all = [...this.snapshots.values()];
+    return sessionId ? all.filter((s) => s.sessionId === sessionId) : all;
   }
 
   async getSession(sessionId) {
