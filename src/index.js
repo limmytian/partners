@@ -20,6 +20,7 @@ export * from './workspaces/workspace-file-service.js';
 export * from './gateway/pty-session.js';
 export * from './gateway/websocket-stream.js';
 export * from './gateway/preview-proxy.js';
+export * from './gateway/warm-pool-manager.js';
 export * from './providers/local-sandbox-provider.js';
 export * from './providers/cubesandbox-provider.js';
 export * from './providers/kubernetes-api.js';

@@ -20,6 +20,7 @@ export class InMemoryAgentExecutionGateway {
     provider,
     store = new InMemoryGatewayStore(),
     artifactStore = null,
+    warmPool = null,
     clock = () => new Date(),
     metrics = null,
   } = {}) {
@@ -30,6 +31,7 @@ export class InMemoryAgentExecutionGateway {
     this.provider = provider;
     this.store = store;
     this.artifactStore = artifactStore;
+    this.warmPool = warmPool;
     this.clock = clock;
     this.metrics = metrics;
   }
@@ -57,7 +59,9 @@ export class InMemoryAgentExecutionGateway {
       ...(snapshotId ? { snapshotId } : {}),
     };
 
-    const session = await this.provider.createSession(providerRequest);
+    const session = this.warmPool
+      ? await this.warmPool.acquireSession(providerRequest)
+      : await this.provider.createSession(providerRequest);
     const now = this.#now();
     const record = {
       ...session,
@@ -69,7 +73,10 @@ export class InMemoryAgentExecutionGateway {
       templateId: templateId ?? null,
       createdAt: session.createdAt ?? now,
       updatedAt: session.updatedAt ?? now,
-      metadata: request.metadata ?? {},
+      metadata: {
+        ...(session.metadata ?? {}),
+        ...(request.metadata ?? {}),
+      },
       actor: request.actor ?? null,
     };
     return this.store.saveSession(record);
