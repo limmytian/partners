@@ -187,6 +187,8 @@
       case 'sessions':
         await loadSessions();
         break;
+      case 'capabilities':
+        break;
       case 'idempotency':
         await loadIdempotencyKeys();
         break;

@@ -38,6 +38,7 @@
     <div class="nav-item" data-tab="audit">Audit Records</div>
     <div class="nav-item" data-tab="jobs">Jobs Explorer</div>
     <div class="nav-item" data-tab="sessions">Sessions Explorer</div>
+    <div class="nav-item" data-tab="capabilities">Runtimes & Capabilities</div>
     <div class="nav-item" data-tab="idempotency">Idempotency Keys</div>
   </nav>
 
@@ -54,6 +55,11 @@
           <div class="card-title">Active Sessions</div>
           <div id="stat-active-sessions" class="card-value">-</div>
           <div id="stat-total-sessions" class="card-subtext">Total sessions: -</div>
+        </div>
+        <div class="card">
+          <div class="card-title">MicroVM & CubeCoW</div>
+          <div id="stat-microvm-tier" class="card-value" style="color:var(--accent);">Sub-60ms</div>
+          <div class="card-subtext">MicroVM + CoW Snapshot Ready</div>
         </div>
         <div class="card">
           <div class="card-title">Gateway Uptime</div>
@@ -194,7 +200,104 @@
       </div>
     </section>
 
-    <!-- 5. Idempotency Keys Section -->
+    <!-- 5. Runtimes & Capabilities Matrix Section -->
+    <section id="view-capabilities" class="view-section">
+      <div class="grid-cards" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 1.5rem;">
+        <div class="card">
+          <div class="card-title">Local Dev Sandbox</div>
+          <div class="card-value" style="font-size:1.1rem; color:var(--text-secondary); margin-top:0.25rem;">Basic Pod Tier</div>
+          <div class="card-subtext">Process execution, streaming, and workspace file APIs</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Kubernetes Provider</div>
+          <div class="card-value" style="font-size:1.1rem; color:var(--info); margin-top:0.25rem;">gVisor / Kata / Pod</div>
+          <div class="card-subtext">Non-privileged container isolation & PVC storage</div>
+        </div>
+        <div class="card" style="border-color: rgba(56, 189, 248, 0.4);">
+          <div class="card-title">CubeSandbox MicroVM</div>
+          <div class="card-value" style="font-size:1.1rem; color:var(--accent); margin-top:0.25rem;">MicroVM Privileged Tier</div>
+          <div class="card-subtext">Sub-60ms cold start, KVM isolation & CubeCoW snapshot/fork</div>
+        </div>
+      </div>
+
+      <div class="table-container">
+        <div class="table-header-tools">
+          <div class="table-title">Partners Capabilities Matrix & Data-Plane Compliance</div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Capability</th>
+              <th>Category</th>
+              <th>Local Sandbox</th>
+              <th>Kubernetes Pod</th>
+              <th>CubeSandbox MicroVM</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody id="capabilities-table-body">
+            <tr>
+              <td class="mono">process.exec / process.stream</td>
+              <td><span class="badge badge-infra">Core Process</span></td>
+              <td><span class="pill pill-succeeded">Supported</span></td>
+              <td><span class="pill pill-succeeded">Supported</span></td>
+              <td><span class="pill pill-succeeded">Supported</span></td>
+              <td>Command execution & real-time stdio stream multiplexing</td>
+            </tr>
+            <tr>
+              <td class="mono">file.tree / file.preview</td>
+              <td><span class="badge badge-infra">Workspace File</span></td>
+              <td><span class="pill pill-succeeded">Supported</span></td>
+              <td><span class="pill pill-succeeded">Supported</span></td>
+              <td><span class="pill pill-succeeded">Supported</span></td>
+              <td>Safe canonical workspace browsing & sensitive pattern redaction</td>
+            </tr>
+            <tr>
+              <td class="mono">file.stream_download</td>
+              <td><span class="badge badge-infra">Workspace File</span></td>
+              <td><span class="pill pill-succeeded">Supported</span></td>
+              <td><span class="pill pill-succeeded">Supported</span></td>
+              <td><span class="pill pill-succeeded">Supported</span></td>
+              <td>Direct download & ustar tar.gz archive streaming</td>
+            </tr>
+            <tr>
+              <td class="mono">artifacts.publish</td>
+              <td><span class="badge badge-infra">E2B Protocol</span></td>
+              <td><span class="pill pill-succeeded">Supported</span></td>
+              <td><span class="pill pill-succeeded">Supported</span></td>
+              <td><span class="pill pill-succeeded">Supported</span></td>
+              <td>In-sandbox persistent artifact contract & manifest indexing</td>
+            </tr>
+            <tr>
+              <td class="mono">microvm.sub_60ms_start</td>
+              <td><span class="badge" style="background:rgba(234,179,8,0.15); color:var(--warning);">MicroVM Hardware</span></td>
+              <td><span class="pill pill-failed">No</span></td>
+              <td><span class="pill pill-failed">No</span></td>
+              <td><span class="pill pill-succeeded" style="background:rgba(56,189,248,0.2); color:var(--accent);">Sub-60ms</span></td>
+              <td>Ultra-fast cold-start sandbox boot via micro-hypervisor</td>
+            </tr>
+            <tr>
+              <td class="mono">cube_cow.memory_snapshot</td>
+              <td><span class="badge" style="background:rgba(234,179,8,0.15); color:var(--warning);">CubeCoW State</span></td>
+              <td><span class="pill pill-failed">No</span></td>
+              <td><span class="pill pill-failed">No</span></td>
+              <td><span class="pill pill-succeeded" style="background:rgba(56,189,248,0.2); color:var(--accent);">Supported</span></td>
+              <td>Millisecond-level memory and CoW filesystem state capture</td>
+            </tr>
+            <tr>
+              <td class="mono">cube_cow.instant_fork</td>
+              <td><span class="badge" style="background:rgba(234,179,8,0.15); color:var(--warning);">CubeCoW State</span></td>
+              <td><span class="pill pill-failed">No</span></td>
+              <td><span class="pill pill-failed">No</span></td>
+              <td><span class="pill pill-succeeded" style="background:rgba(56,189,248,0.2); color:var(--accent);">Supported</span></td>
+              <td>Instant sub-tree branch branching for speculative multi-agent turns</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 6. Idempotency Keys Section -->
     <section id="view-idempotency" class="view-section">
       <div class="table-container">
         <div class="table-header-tools">
