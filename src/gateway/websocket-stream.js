@@ -174,3 +174,55 @@ export class WebSocketStream extends EventEmitter {
     }
   }
 }
+
+/**
+ * Connects as a WebSocket client to a URL and returns a WebSocketStream
+ */
+export function connectClientWebSocket(targetUrl, { headers = {} } = {}) {
+  return new Promise((resolve, reject) => {
+    import('node:net').then(({ createConnection }) => {
+      import('node:crypto').then(({ randomBytes }) => {
+        const url = new URL(targetUrl);
+        const port = Number(url.port || (url.protocol === 'https:' || url.protocol === 'wss:' ? 443 : 80));
+        const host = url.hostname;
+        const key = randomBytes(16).toString('base64');
+
+        const socket = createConnection({ host, port }, () => {
+          let request = `GET ${url.pathname}${url.search} HTTP/1.1\r\n`;
+          request += `Host: ${url.host}\r\n`;
+          request += `Upgrade: websocket\r\n`;
+          request += `Connection: Upgrade\r\n`;
+          request += `Sec-WebSocket-Key: ${key}\r\n`;
+          request += `Sec-WebSocket-Version: 13\r\n`;
+          for (const [k, v] of Object.entries(headers)) {
+            request += `${k}: ${v}\r\n`;
+          }
+          request += `\r\n`;
+          socket.write(request);
+        });
+
+        let responseBuffer = Buffer.alloc(0);
+        const onData = (chunk) => {
+          responseBuffer = Buffer.concat([responseBuffer, chunk]);
+          const headerEnd = responseBuffer.indexOf('\r\n\r\n');
+          if (headerEnd !== -1) {
+            socket.off('data', onData);
+            const headerStr = responseBuffer.subarray(0, headerEnd).toString('utf8');
+            const statusLine = headerStr.split('\r\n')[0];
+            if (!statusLine.includes('101')) {
+              socket.destroy();
+              return reject(new Error(`WebSocket handshake failed: ${statusLine}`));
+            }
+            const head = responseBuffer.subarray(headerEnd + 4);
+            const ws = new WebSocketStream(socket, { isServer: false, head });
+            resolve(ws);
+          }
+        };
+
+        socket.on('data', onData);
+        socket.on('error', reject);
+      });
+    }).catch(reject);
+  });
+}
+

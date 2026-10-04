@@ -12,6 +12,7 @@ import {
   LocalSandboxProvider,
   PtySession,
   WebSocketStream,
+  connectClientWebSocket,
 } from '../src/index.js';
 
 test('WebSocketStream frames, sends, and parses messages correctly', async () => {
@@ -111,29 +112,28 @@ test('HTTP Gateway exposes WebSocket PTY terminal at /v1/sessions/:id/pty', asyn
     assert.equal(ptyMeta.rows, 30);
 
     // 3. Connect via WebSocket to /v1/sessions/:id/pty
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/v1/sessions/ses_pty_test/pty?cols=80&rows=24`);
+    const ws = await connectClientWebSocket(`ws://127.0.0.1:${port}/v1/sessions/ses_pty_test/pty?cols=80&rows=24`);
     let terminalOutput = '';
 
     await new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error(`Timeout waiting for PTY output, received: ${terminalOutput}`)), 10000);
-      ws.onopen = () => {
-        // Send resize control frame
-        ws.send(JSON.stringify({ type: 'resize', cols: 120, rows: 40 }));
-        // Send command through JSON stdin
-        ws.send(JSON.stringify({ type: 'stdin', data: 'echo "INTERACTIVE_PTY_OK"\nexit\n' }));
-      };
-      ws.onmessage = (event) => {
-        terminalOutput += event.data;
+      ws.on('message', (data) => {
+        terminalOutput += data.toString();
         if (terminalOutput.includes('INTERACTIVE_PTY_OK')) {
           clearTimeout(timer);
           ws.close();
           resolve();
         }
-      };
-      ws.onerror = (err) => {
+      });
+      ws.on('error', (err) => {
         clearTimeout(timer);
         reject(err);
-      };
+      });
+
+      // Send resize control frame
+      ws.send(JSON.stringify({ type: 'resize', cols: 120, rows: 40 }));
+      // Send command through JSON stdin
+      ws.send(JSON.stringify({ type: 'stdin', data: 'echo "INTERACTIVE_PTY_OK"\nexit\n' }));
     });
 
     assert.ok(terminalOutput.includes('INTERACTIVE_PTY_OK'));
@@ -179,46 +179,36 @@ test('HTTP Gateway enforces sessions:shell authorization for WebSocket PTY', asy
 
     // Unauthorized WebSocket connection without token should fail
     await assert.rejects(async () => {
-      await new Promise((resolve, reject) => {
-        const ws = new WebSocket(`ws://127.0.0.1:${port}/v1/sessions/ses_auth_pty/pty`);
-        ws.onopen = resolve;
-        ws.onerror = reject;
-      });
+      await connectClientWebSocket(`ws://127.0.0.1:${port}/v1/sessions/ses_auth_pty/pty`);
     });
 
     // Unauthorized WebSocket connection with read-only token should fail
     await assert.rejects(async () => {
-      await new Promise((resolve, reject) => {
-        const ws = new WebSocket(`ws://127.0.0.1:${port}/v1/sessions/ses_auth_pty/pty`, {
-          headers: { Authorization: 'Bearer read-only-token' },
-        });
-        ws.onopen = resolve;
-        ws.onerror = reject;
+      await connectClientWebSocket(`ws://127.0.0.1:${port}/v1/sessions/ses_auth_pty/pty`, {
+        headers: { Authorization: 'Bearer read-only-token' },
       });
     });
 
     // Authorized WebSocket connection with shell-token succeeds
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/v1/sessions/ses_auth_pty/pty`, {
+    const ws = await connectClientWebSocket(`ws://127.0.0.1:${port}/v1/sessions/ses_auth_pty/pty`, {
       headers: { Authorization: 'Bearer shell-token' },
     });
     let received = '';
     await new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('Timeout waiting for auth PTY')), 5000);
-      ws.onopen = () => {
-        ws.send('echo "AUTH_SHELL_OK"\nexit\n');
-      };
-      ws.onmessage = (event) => {
-        received += event.data;
+      ws.on('message', (data) => {
+        received += data.toString();
         if (received.includes('AUTH_SHELL_OK')) {
           clearTimeout(timer);
           ws.close();
           resolve();
         }
-      };
-      ws.onerror = (err) => {
+      });
+      ws.on('error', (err) => {
         clearTimeout(timer);
         reject(err);
-      };
+      });
+      ws.send('echo "AUTH_SHELL_OK"\nexit\n');
     });
 
     assert.ok(received.includes('AUTH_SHELL_OK'));
