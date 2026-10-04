@@ -365,9 +365,10 @@
           <td>${escapeHtml((s.tenantId || '-') + ' / ' + (s.projectId || '-'))}</td>
           <td>${formatTime(s.createdAt)}</td>
           <td>
+            <button onclick="window.partnersConsole.openSessionWorkspace('${escapeHtml(s.id)}')">Files</button>
             ${s.state === 'ready' || s.state === 'busy' ? `
               <button class="danger" onclick="window.partnersConsole.confirmStopSession('${escapeHtml(s.id)}')">Stop</button>
-            ` : '-'}
+            ` : ''}
           </td>
         </tr>
       `).join('');
@@ -601,11 +602,151 @@
     statusText.textContent = 'Auth Required (Click Settings)';
   }
 
+  // Workspace File Manager Logic
+  let activeWorkspaceSessionId = null;
+  let activeSelectedFilePath = null;
+
+  const workspaceModal = document.getElementById('workspace-modal');
+  const closeWorkspaceModal = document.getElementById('close-workspace-modal');
+  const closeWorkspaceModalBtn = document.getElementById('close-workspace-modal-btn');
+  const modalSessionId = document.getElementById('modal-session-id');
+  const wsTreeContainer = document.getElementById('ws-tree-container');
+  const wsActiveFilename = document.getElementById('ws-active-filename');
+  const wsFileActions = document.getElementById('ws-file-actions');
+  const wsFileContent = document.getElementById('ws-file-content');
+  const wsSensitiveBadge = document.getElementById('ws-sensitive-badge');
+  const wsDownloadSingleBtn = document.getElementById('ws-download-single-btn');
+  const wsDownloadArchiveBtn = document.getElementById('ws-download-archive-btn');
+  const wsRefreshBtn = document.getElementById('ws-refresh-btn');
+
+  function openSessionWorkspace(sessionId) {
+    activeWorkspaceSessionId = sessionId;
+    activeSelectedFilePath = null;
+    modalSessionId.textContent = sessionId;
+    wsActiveFilename.textContent = 'Select a file to preview';
+    wsFileActions.style.display = 'none';
+    wsSensitiveBadge.style.display = 'none';
+    wsFileContent.textContent = 'Select a file from the explorer on the left.';
+    workspaceModal.classList.add('open');
+    loadWorkspaceTree();
+  }
+
+  function closeWorkspace() {
+    workspaceModal.classList.remove('open');
+    activeWorkspaceSessionId = null;
+    activeSelectedFilePath = null;
+  }
+
+  closeWorkspaceModal.addEventListener('click', closeWorkspace);
+  closeWorkspaceModalBtn.addEventListener('click', closeWorkspace);
+  wsRefreshBtn.addEventListener('click', loadWorkspaceTree);
+
+  wsDownloadArchiveBtn.addEventListener('click', () => {
+    if (!activeWorkspaceSessionId) return;
+    const downloadUrl = `${config.gatewayUrl}/v1/sessions/${encodeURIComponent(activeWorkspaceSessionId)}/workspace/download`;
+    window.open(downloadUrl, '_blank');
+  });
+
+  wsDownloadSingleBtn.addEventListener('click', () => {
+    if (!activeWorkspaceSessionId || !activeSelectedFilePath) return;
+    const downloadUrl = `${config.gatewayUrl}/v1/sessions/${encodeURIComponent(activeWorkspaceSessionId)}/workspace/download?path=${encodeURIComponent(activeSelectedFilePath)}`;
+    window.open(downloadUrl, '_blank');
+  });
+
+  async function loadWorkspaceTree() {
+    if (!activeWorkspaceSessionId) return;
+    wsTreeContainer.innerHTML = 'Loading tree...';
+    try {
+      const res = await apiFetch(`/v1/sessions/${encodeURIComponent(activeWorkspaceSessionId)}/workspace/tree`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        wsTreeContainer.innerHTML = `<span style="color:var(--danger)">Error: ${err.error || res.statusText}</span>`;
+        return;
+      }
+      const data = await res.json();
+      wsTreeContainer.innerHTML = '';
+      if (!data.entries || data.entries.length === 0) {
+        wsTreeContainer.innerHTML = '<span style="color:var(--text-muted)">Empty workspace</span>';
+        return;
+      }
+      renderTreeEntries(data.entries, wsTreeContainer);
+    } catch (err) {
+      wsTreeContainer.innerHTML = `<span style="color:var(--danger)">Failed to load tree: ${err.message}</span>`;
+    }
+  }
+
+  function renderTreeEntries(entries, container) {
+    for (const entry of entries) {
+      const node = document.createElement('div');
+      node.className = 'tree-node';
+      if (entry.isSensitive) {
+        node.classList.add('tree-node-sensitive');
+      }
+
+      const icon = document.createElement('span');
+      icon.className = 'tree-node-icon';
+      icon.textContent = entry.type === 'directory' ? '📁' : '📄';
+
+      const name = document.createElement('span');
+      name.className = 'tree-node-name';
+      name.textContent = entry.name;
+      if (entry.isSensitive) {
+        name.title = 'Sensitive credential / secret file (redacted on preview)';
+      }
+
+      node.appendChild(icon);
+      node.appendChild(name);
+      container.appendChild(node);
+
+      if (entry.type === 'directory' && entry.children) {
+        const childrenContainer = document.createElement('div');
+        childrenContainer.className = 'tree-children';
+        renderTreeEntries(entry.children, childrenContainer);
+        container.appendChild(childrenContainer);
+
+        node.addEventListener('click', () => {
+          childrenContainer.style.display = childrenContainer.style.display === 'none' ? 'block' : 'none';
+        });
+      } else if (entry.type === 'file') {
+        node.addEventListener('click', () => {
+          document.querySelectorAll('.tree-node.active').forEach((n) => n.classList.remove('active'));
+          node.classList.add('active');
+          selectWorkspaceFile(entry.path, entry.isSensitive);
+        });
+      }
+    }
+  }
+
+  async function selectWorkspaceFile(filePath, isSensitive) {
+    activeSelectedFilePath = filePath;
+    wsActiveFilename.textContent = filePath;
+    wsFileActions.style.display = 'flex';
+    wsSensitiveBadge.style.display = isSensitive ? 'inline-block' : 'none';
+    wsFileContent.textContent = 'Loading file content...';
+
+    try {
+      const res = await apiFetch(`/v1/sessions/${encodeURIComponent(activeWorkspaceSessionId)}/workspace/file?path=${encodeURIComponent(filePath)}`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        wsFileContent.textContent = `Error loading file: ${err.error || res.statusText}`;
+        return;
+      }
+      const data = await res.json();
+      wsFileContent.textContent = data.content || '(empty file)';
+      if (data.isTruncated) {
+        wsFileContent.textContent += `\n\n--- Truncated: showing first ${data.previewBytes} bytes of ${data.sizeBytes} bytes total ---`;
+      }
+    } catch (err) {
+      wsFileContent.textContent = `Failed to fetch file: ${err.message}`;
+    }
+  }
+
   // Export to window for inline onclick handlers
   window.partnersConsole = {
     openJobStream,
     confirmCancelJob,
     confirmStopSession,
+    openSessionWorkspace,
   };
 
   document.addEventListener('DOMContentLoaded', init);
