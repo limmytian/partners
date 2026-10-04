@@ -132,6 +132,13 @@ export class InMemoryAgentExecutionGateway {
     return this.provider.downloadWorkspaceArchive(sessionId, options);
   }
 
+  async createSessionPty(sessionId, options = {}) {
+    if (!this.provider.createPtySession) {
+      throw Object.assign(new Error('Provider does not support interactive PTY sessions'), { statusCode: 501 });
+    }
+    return this.provider.createPtySession(sessionId, options);
+  }
+
   async runJob(request, onEvent = () => {}) {
     assertExecutionJobRequest(request);
 

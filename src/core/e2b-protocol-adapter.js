@@ -15,6 +15,7 @@ export const SandboxCapability = Object.freeze({
   FileStat: 'file.stat',
   FileRemove: 'file.remove',
   ArtifactsPublish: 'artifacts.publish',
+  TerminalPty: 'terminal.pty',
 
   // Advanced Privileged / MicroVM Capabilities (CubeSandbox / MicroVM exclusive)
   MicroVMIsolation: 'microvm.isolation',
@@ -41,6 +42,7 @@ export const PROVIDER_CAPABILITIES = Object.freeze({
     SandboxCapability.FileStat,
     SandboxCapability.FileRemove,
     SandboxCapability.ArtifactsPublish,
+    SandboxCapability.TerminalPty,
   ]),
 
   // Kubernetes non-privileged Pod provider
@@ -54,6 +56,7 @@ export const PROVIDER_CAPABILITIES = Object.freeze({
     SandboxCapability.FileStat,
     SandboxCapability.FileRemove,
     SandboxCapability.ArtifactsPublish,
+    SandboxCapability.TerminalPty,
   ]),
 
   // CubeSandbox MicroVM provider (full hardware isolation & CoW snapshots)
@@ -67,6 +70,7 @@ export const PROVIDER_CAPABILITIES = Object.freeze({
     SandboxCapability.FileStat,
     SandboxCapability.FileRemove,
     SandboxCapability.ArtifactsPublish,
+    SandboxCapability.TerminalPty,
     SandboxCapability.MicroVMIsolation,
     SandboxCapability.Sub60msColdStart,
     SandboxCapability.IndependentKernel,

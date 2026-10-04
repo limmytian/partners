@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import http from 'node:http';
@@ -5,6 +6,7 @@ import { EventEmitter } from 'node:events';
 import { extname } from 'node:path';
 
 import { GatewayServiceAuthorizer, redactAuthError } from '../security/gateway-service-auth.js';
+import { WebSocketStream } from './websocket-stream.js';
 
 const TERMINAL_JOB_STATES = new Set(['succeeded', 'failed', 'timed_out', 'cancelled']);
 
@@ -59,6 +61,22 @@ export function createAgentExecutionGatewayServer({
       sendJson(res, statusCode, statusCode === 401 || statusCode === 403
         ? redactAuthError(error)
         : { error: error?.message ?? 'Internal server error' });
+    }
+  });
+
+  server.on('upgrade', async (req, socket, head) => {
+    try {
+      await handleUpgrade({ req, socket, head, gateway, authorizer, logger });
+    } catch (error) {
+      const statusCode = statusForError(error);
+      const message = error?.message ?? 'Upgrade failed';
+      socket.write(
+        `HTTP/1.1 ${statusCode} ${http.STATUS_CODES[statusCode] || 'Error'}\r\n` +
+        'Connection: close\r\n' +
+        'Content-Type: text/plain; charset=utf-8\r\n\r\n' +
+        message
+      );
+      socket.destroy();
     }
   });
 
@@ -250,6 +268,23 @@ async function routeRequest({ req, res, gateway, authorizer, eventBus, runningJo
     }
     if (req.method === 'POST' && ['stop', 'archive'].includes(segments[3])) {
       return sendJson(res, 501, { error: `${segments[3]} session is not implemented yet` });
+    }
+    if (req.method === 'POST' && (segments[3] === 'pty' || segments[3] === 'shell')) {
+      const session = await gateway.getSession(sessionId);
+      if (!session) {
+        return sendJson(res, 404, { error: 'Session not found' });
+      }
+      await authorize({ req, authorizer, scope: 'sessions:shell', resource: session });
+      const body = await readJson(req, { allowEmpty: true });
+      const wsUrl = `ws://${req.headers.host || 'localhost'}/v1/sessions/${encodeURIComponent(sessionId)}/pty`;
+      return sendJson(res, 200, {
+        sessionId,
+        wsUrl,
+        ptyEndpoint: `/v1/sessions/${encodeURIComponent(sessionId)}/pty`,
+        command: body.command ?? '/bin/sh',
+        cols: body.cols ?? 80,
+        rows: body.rows ?? 24,
+      });
     }
   }
 
@@ -571,4 +606,149 @@ function contentTypeForName(name = '') {
 
 function safeHeaderFilename(name = 'artifact') {
   return name.replaceAll(/["\r\n]/g, '_');
+}
+
+const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
+
+async function handleUpgrade({ req, socket, head, gateway, authorizer, logger }) {
+  const url = new URL(req.url, 'http://localhost');
+  const segments = url.pathname.split('/').filter(Boolean);
+
+  // Upgrade route pattern: /v1/sessions/:sessionId/pty or /v1/sessions/:sessionId/shell
+  if (segments[0] !== 'v1' || segments[1] !== 'sessions' || !segments[2] || (segments[3] !== 'pty' && segments[3] !== 'shell')) {
+    const error = new Error('Upgrade route not found');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const sessionId = segments[2];
+  const session = await gateway.getSession(sessionId);
+  if (!session) {
+    const error = new Error('Session not found');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  // Authorize with sessions:shell scope
+  await authorize({ req, authorizer, scope: 'sessions:shell', resource: session });
+
+  // Validate WebSocket Upgrade headers
+  const upgradeHeader = (req.headers.upgrade || '').toLowerCase();
+  const secWebSocketKey = req.headers['sec-websocket-key'];
+  if (upgradeHeader !== 'websocket' || !secWebSocketKey) {
+    const error = new Error('Bad Request: Invalid WebSocket upgrade headers');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  // Parse terminal query options
+  const command = url.searchParams.get('command') || '/bin/sh';
+  const cols = Number.parseInt(url.searchParams.get('cols') || '80', 10) || 80;
+  const rows = Number.parseInt(url.searchParams.get('rows') || '24', 10) || 24;
+
+  // Complete WebSocket 101 Handshake
+  const acceptKey = createHash('sha1').update(secWebSocketKey + WS_GUID).digest('base64');
+  socket.write(
+    'HTTP/1.1 101 Switching Protocols\r\n' +
+    'Upgrade: websocket\r\n' +
+    'Connection: Upgrade\r\n' +
+    `Sec-WebSocket-Accept: ${acceptKey}\r\n\r\n`
+  );
+
+  const ws = new WebSocketStream(socket, { isServer: true, head });
+
+  // Initialize PTY session via gateway
+  let pty;
+  try {
+    pty = await gateway.createSessionPty(sessionId, { command, cols, rows });
+  } catch (err) {
+    logger?.error?.('Failed to spawn PTY session:', err);
+    ws.send(JSON.stringify({ type: 'error', error: err.message ?? 'Failed to spawn PTY' }));
+    ws.close(1011, 'PTY initialization failed');
+    return;
+  }
+
+  // Forward PTY output to WebSocket
+  pty.on('data', (chunk) => {
+    ws.send(chunk.toString('utf8'));
+  });
+
+  const pendingWrites = [];
+  let ptyReady = Boolean(pty.isReady);
+
+  pty.on('ready', () => {
+    ptyReady = true;
+    while (pendingWrites.length > 0) {
+      const item = pendingWrites.shift();
+      if (item.type === 'stdin') {
+        pty.write(item.data);
+      } else if (item.type === 'resize') {
+        pty.resize(item.cols, item.rows);
+      }
+    }
+  });
+
+  pty.on('close', (exitCode) => {
+    try {
+      ws.send(JSON.stringify({ type: 'exit', exitCode }));
+    } catch {
+      // socket may already be closing
+    }
+    ws.close(1000, `PTY exited with code ${exitCode}`);
+  });
+
+  pty.on('error', (err) => {
+    logger?.error?.('PTY error:', err);
+    try {
+      ws.send(JSON.stringify({ type: 'error', error: err.message }));
+    } catch {}
+    ws.close(1011, 'PTY error');
+  });
+
+  // Handle incoming WebSocket messages
+  ws.on('message', (data, isBinary) => {
+    const text = isBinary ? data.toString('utf8') : String(data);
+    // Check if JSON message (resize, ping, stdin command)
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed && typeof parsed === 'object') {
+        if (parsed.type === 'resize') {
+          const rCols = Number.parseInt(parsed.cols, 10);
+          const rRows = Number.parseInt(parsed.rows, 10);
+          if (rCols && rRows) {
+            if (ptyReady) {
+              pty.resize(rCols, rRows);
+            } else {
+              pendingWrites.push({ type: 'resize', cols: rCols, rows: rRows });
+            }
+            return;
+          }
+        }
+        if (parsed.type === 'stdin') {
+          if (ptyReady) {
+            pty.write(parsed.data ?? '');
+          } else {
+            pendingWrites.push({ type: 'stdin', data: parsed.data ?? '' });
+          }
+          return;
+        }
+      }
+    } catch {
+      // Not a JSON control message, treat raw message as direct stdin keystrokes
+    }
+    if (ptyReady) {
+      pty.write(text);
+    } else {
+      pendingWrites.push({ type: 'stdin', data: text });
+    }
+  });
+
+  ws.on('close', () => {
+    pty.kill('SIGTERM');
+  });
+
+  ws.on('error', (err) => {
+    logger?.error?.('WebSocket stream error:', err);
+    pty.kill('SIGKILL');
+  });
 }

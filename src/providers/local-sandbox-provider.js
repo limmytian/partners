@@ -106,6 +106,22 @@ export class LocalSandboxProvider {
     return createArchiveDownloadStream(session.workspacePath, options);
   }
 
+  async createPtySession(sessionId, options = {}) {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+    const { PtySession } = await import('../gateway/pty-session.js');
+    return new PtySession({
+      cwd: session.workspacePath,
+      command: options.command ?? '/bin/sh',
+      args: options.args ?? [],
+      env: options.env ?? {},
+      cols: options.cols ?? 80,
+      rows: options.rows ?? 24,
+    });
+  }
+
   async runJob(request, onEvent = () => {}) {
     assertExecutionJobRequest(request);
 
