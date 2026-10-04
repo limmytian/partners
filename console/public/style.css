@@ -461,3 +461,22 @@ tr:hover td {
 .tree-children {
   padding-left: 1.1rem;
 }
+
+/* Terminal Modal Specifics */
+#pty-terminal-output {
+  font-family: var(--font-mono);
+  line-height: 1.35;
+  color: #38bdf8;
+}
+
+#pty-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+}
+
+/* Preview Modal Specifics */
+#preview-iframe {
+  border-radius: 0 0 6px 6px;
+}
+

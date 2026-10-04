@@ -69,6 +69,34 @@ export function createConsoleServer({
       }
     }
 
+    // Direct preview proxy: /preview/:sessionId/:port/* -> forward to gatewayUrl/preview/...
+    if (pathname.startsWith('/preview/')) {
+      const targetUrl = new URL(pathname + url.search, gatewayUrl);
+      try {
+        const headers = { ...req.headers };
+        delete headers.host;
+
+        const proxyReq = http.request(targetUrl, {
+          method: req.method,
+          headers,
+        }, (proxyRes) => {
+          res.writeHead(proxyRes.statusCode, proxyRes.headers);
+          proxyRes.pipe(res);
+        });
+
+        proxyReq.on('error', (err) => {
+          res.writeHead(502, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: `Preview proxy to gateway failed: ${err.message}` }));
+        });
+
+        req.pipe(proxyReq);
+        return;
+      } catch (error) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ error: error.message }));
+      }
+    }
+
     // Static files
     try {
       const sanitized = pathname === '/' ? '/index.html' : pathname;
@@ -103,6 +131,41 @@ export function createConsoleServer({
       res.writeHead(500, { 'Content-Type': 'text/plain' });
       res.end(`Internal server error: ${err.message}`);
     }
+  });
+
+  server.on('upgrade', (req, clientSocket, head) => {
+    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    let targetPath = url.pathname + url.search;
+    if (targetPath.startsWith('/api/proxy/')) {
+      targetPath = targetPath.slice('/api/proxy'.length);
+    }
+    const targetUrl = new URL(targetPath, gatewayUrl);
+
+    const proxyReq = http.request(targetUrl, {
+      method: req.method,
+      headers: { ...req.headers, host: targetUrl.host },
+    });
+
+    proxyReq.on('upgrade', (proxyRes, proxySocket, proxyHead) => {
+      clientSocket.write(
+        `HTTP/1.1 101 Switching Protocols\r\n` +
+        Object.entries(proxyRes.headers)
+          .map(([k, v]) => `${k}: ${v}\r\n`)
+          .join('') +
+        '\r\n'
+      );
+      if (proxyHead && proxyHead.length) clientSocket.write(proxyHead);
+      if (head && head.length) proxySocket.write(head);
+      proxySocket.pipe(clientSocket);
+      clientSocket.pipe(proxySocket);
+    });
+
+    proxyReq.on('error', (err) => {
+      clientSocket.write('HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n');
+      clientSocket.destroy();
+    });
+
+    proxyReq.end();
   });
 
   return {

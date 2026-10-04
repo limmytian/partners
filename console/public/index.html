@@ -38,6 +38,7 @@
     <div class="nav-item" data-tab="audit">Audit Records</div>
     <div class="nav-item" data-tab="jobs">Jobs Explorer</div>
     <div class="nav-item" data-tab="sessions">Sessions Explorer</div>
+    <div class="nav-item" data-tab="templates">Snapshots & Templates</div>
     <div class="nav-item" data-tab="capabilities">Runtimes & Capabilities</div>
     <div class="nav-item" data-tab="idempotency">Idempotency Keys</div>
   </nav>
@@ -200,7 +201,52 @@
       </div>
     </section>
 
-    <!-- 5. Runtimes & Capabilities Matrix Section -->
+    <!-- 5. Snapshots & Templates Section -->
+    <section id="view-templates" class="view-section">
+      <div class="table-container" style="margin-bottom: 2rem;">
+        <div class="table-header-tools">
+          <div class="table-title">Reusable Environment Templates</div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Template ID</th>
+              <th>Name</th>
+              <th>Snapshot ID</th>
+              <th>Description</th>
+              <th>Created At</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="templates-table-body">
+            <tr><td colspan="6" style="text-align:center; color: var(--text-muted);">Loading templates...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="table-container">
+        <div class="table-header-tools">
+          <div class="table-title">Captured Workspace Snapshots</div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Snapshot ID</th>
+              <th>Label</th>
+              <th>Source Session</th>
+              <th>Provider</th>
+              <th>Created At</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="snapshots-table-body">
+            <tr><td colspan="6" style="text-align:center; color: var(--text-muted);">Loading snapshots...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 6. Runtimes & Capabilities Matrix Section -->
     <section id="view-capabilities" class="view-section">
       <div class="grid-cards" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 1.5rem;">
         <div class="card">
@@ -414,6 +460,100 @@
       <div class="modal-footer">
         <button id="cancel-confirm-btn">Cancel</button>
         <button id="execute-confirm-btn" class="danger">Confirm & Execute</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Interactive PTY Web Terminal Modal -->
+  <div id="terminal-modal" class="modal-backdrop">
+    <div class="modal-dialog" style="max-width: 950px; height: 80vh;">
+      <div class="modal-header">
+        <div class="modal-title">Interactive Terminal (PTY): <span id="pty-session-id" class="mono"></span></div>
+        <div style="display:flex; gap:0.5rem; align-items:center;">
+          <span id="pty-status-badge" class="badge badge-infra">Connecting</span>
+          <button id="close-terminal-modal" class="btn-close">&times;</button>
+        </div>
+      </div>
+      <div class="modal-body" style="height: calc(100% - 60px); padding: 0.75rem; display:flex; flex-direction:column;">
+        <div id="pty-terminal-output" class="terminal-window" style="flex:1; margin:0; min-height:0; max-height:none; background:#020617; font-size:0.9rem; overflow:auto; white-space:pre-wrap; word-break:break-all;"></div>
+        <div style="display:flex; gap:0.5rem; margin-top:0.75rem;">
+          <input type="text" id="pty-input" placeholder="Type shell command and press Enter..." class="mono" style="flex:1; background:#1e293b; border:1px solid var(--border); color:#fff; padding:0.5rem 0.75rem; border-radius:4px;">
+          <button id="pty-send-btn" class="primary">Send</button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="close-terminal-modal-btn" class="primary">Close Terminal</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create Snapshot Modal -->
+  <div id="snapshot-modal" class="modal-backdrop">
+    <div class="modal-dialog" style="max-width: 500px;">
+      <div class="modal-header">
+        <div class="modal-title">Create Snapshot from Session</div>
+        <button id="close-snapshot-modal" class="btn-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Session ID</label>
+          <input type="text" id="snap-session-id" readonly class="mono">
+        </div>
+        <div class="form-group">
+          <label for="snap-label">Snapshot Label</label>
+          <input type="text" id="snap-label" placeholder="e.g. checkpoint-v1">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="cancel-snapshot-btn">Cancel</button>
+        <button id="submit-snapshot-btn" class="primary">Capture Snapshot</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create Template Modal -->
+  <div id="template-modal" class="modal-backdrop">
+    <div class="modal-dialog" style="max-width: 500px;">
+      <div class="modal-header">
+        <div class="modal-title">Create Template from Snapshot</div>
+        <button id="close-template-modal" class="btn-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Snapshot ID</label>
+          <input type="text" id="tpl-snapshot-id" readonly class="mono">
+        </div>
+        <div class="form-group">
+          <label for="tpl-name">Template Name</label>
+          <input type="text" id="tpl-name" placeholder="e.g. node20-dev-env">
+        </div>
+        <div class="form-group">
+          <label for="tpl-desc">Description</label>
+          <input type="text" id="tpl-desc" placeholder="Pre-warmed dev environment with packages">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="cancel-template-btn">Cancel</button>
+        <button id="submit-template-btn" class="primary">Save Template</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Web Preview Modal -->
+  <div id="preview-modal" class="modal-backdrop">
+    <div class="modal-dialog" style="max-width: 1050px; height: 85vh;">
+      <div class="modal-header">
+        <div class="modal-title">Web Preview: <span id="preview-title" class="mono"></span></div>
+        <div style="display:flex; gap:0.5rem; align-items:center;">
+          <a id="preview-open-ext-link" href="#" target="_blank" style="color:var(--accent); text-decoration:none; font-size:0.85rem;">Open in Tab ↗</a>
+          <button id="close-preview-modal" class="btn-close">&times;</button>
+        </div>
+      </div>
+      <div class="modal-body" style="height: calc(100% - 60px); padding: 0;">
+        <iframe id="preview-iframe" style="width:100%; height:100%; border:none; background:#fff;"></iframe>
+      </div>
+      <div class="modal-footer">
+        <button id="close-preview-modal-btn" class="primary">Close</button>
       </div>
     </div>
   </div>

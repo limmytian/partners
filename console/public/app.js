@@ -46,6 +46,41 @@
   const jobsTenantFilter = document.getElementById('jobs-tenant-filter');
   const sessionsStateFilter = document.getElementById('sessions-state-filter');
 
+  // Terminal Modal Elements
+  const terminalModal = document.getElementById('terminal-modal');
+  const closeTerminalModal = document.getElementById('close-terminal-modal');
+  const closeTerminalModalBtn = document.getElementById('close-terminal-modal-btn');
+  const ptySessionId = document.getElementById('pty-session-id');
+  const ptyStatusBadge = document.getElementById('pty-status-badge');
+  const ptyTerminalOutput = document.getElementById('pty-terminal-output');
+  const ptyInput = document.getElementById('pty-input');
+  const ptySendBtn = document.getElementById('pty-send-btn');
+  let activePtyWebSocket = null;
+
+  // Snapshot & Template Modal Elements
+  const snapshotModal = document.getElementById('snapshot-modal');
+  const closeSnapshotModal = document.getElementById('close-snapshot-modal');
+  const cancelSnapshotBtn = document.getElementById('cancel-snapshot-btn');
+  const submitSnapshotBtn = document.getElementById('submit-snapshot-btn');
+  const snapSessionId = document.getElementById('snap-session-id');
+  const snapLabel = document.getElementById('snap-label');
+
+  const templateModal = document.getElementById('template-modal');
+  const closeTemplateModal = document.getElementById('close-template-modal');
+  const cancelTemplateBtn = document.getElementById('cancel-template-btn');
+  const submitTemplateBtn = document.getElementById('submit-template-btn');
+  const tplSnapshotId = document.getElementById('tpl-snapshot-id');
+  const tplName = document.getElementById('tpl-name');
+  const tplDesc = document.getElementById('tpl-desc');
+
+  // Preview Modal Elements
+  const previewModal = document.getElementById('preview-modal');
+  const closePreviewModal = document.getElementById('close-preview-modal');
+  const closePreviewModalBtn = document.getElementById('close-preview-modal-btn');
+  const previewTitle = document.getElementById('preview-title');
+  const previewOpenExtLink = document.getElementById('preview-open-ext-link');
+  const previewIframe = document.getElementById('preview-iframe');
+
   async function init() {
     // Fetch server default config if not set locally
     if (!state.gatewayUrl) {
@@ -186,6 +221,9 @@
         break;
       case 'sessions':
         await loadSessions();
+        break;
+      case 'templates':
+        await loadTemplatesAndSnapshots();
         break;
       case 'capabilities':
         break;
@@ -366,8 +404,11 @@
           <td>${escapeHtml(s.provider || '-')}</td>
           <td>${escapeHtml((s.tenantId || '-') + ' / ' + (s.projectId || '-'))}</td>
           <td>${formatTime(s.createdAt)}</td>
-          <td>
+          <td style="display:flex; gap:0.25rem; flex-wrap:wrap;">
             <button onclick="window.partnersConsole.openSessionWorkspace('${escapeHtml(s.id)}')">Files</button>
+            <button onclick="window.partnersConsole.openTerminal('${escapeHtml(s.id)}')">Terminal</button>
+            <button onclick="window.partnersConsole.openSnapshotModal('${escapeHtml(s.id)}')">Snapshot</button>
+            <button onclick="window.partnersConsole.promptPreview('${escapeHtml(s.id)}')">Preview</button>
             ${s.state === 'ready' || s.state === 'busy' ? `
               <button class="danger" onclick="window.partnersConsole.confirmStopSession('${escapeHtml(s.id)}')">Stop</button>
             ` : ''}
@@ -743,12 +784,309 @@
     }
   }
 
+  // 6. Templates and Snapshots Tab
+  async function loadTemplatesAndSnapshots() {
+    await Promise.all([loadTemplates(), loadSnapshots()]);
+  }
+
+  async function loadTemplates() {
+    const tbody = document.getElementById('templates-table-body');
+    try {
+      const res = await apiFetch('/v1/templates');
+      if (!res.ok) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--danger);">Failed to load templates.</td></tr>';
+        return;
+      }
+      const data = await res.json();
+      const templates = data.items || [];
+      if (templates.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--text-muted);">No reusable templates registered yet.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = templates.map((t) => `
+        <tr>
+          <td class="mono">${escapeHtml(t.id)}</td>
+          <td><strong>${escapeHtml(t.name)}</strong></td>
+          <td class="mono">${escapeHtml(t.snapshotId)}</td>
+          <td>${escapeHtml(t.description || '-')}</td>
+          <td>${formatTime(t.createdAt)}</td>
+          <td>
+            <button class="primary" onclick="window.partnersConsole.spawnFromTemplate('${escapeHtml(t.id)}')">Launch Session</button>
+          </td>
+        </tr>
+      `).join('');
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color: var(--danger);">${err.message}</td></tr>`;
+    }
+  }
+
+  async function loadSnapshots() {
+    const tbody = document.getElementById('snapshots-table-body');
+    try {
+      const res = await apiFetch('/v1/snapshots');
+      if (!res.ok) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--danger);">Failed to load snapshots.</td></tr>';
+        return;
+      }
+      const data = await res.json();
+      const snapshots = data.items || [];
+      if (snapshots.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--text-muted);">No snapshots captured yet.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = snapshots.map((s) => `
+        <tr>
+          <td class="mono">${escapeHtml(s.id)}</td>
+          <td><span class="badge badge-infra">${escapeHtml(s.label || 'default')}</span></td>
+          <td class="mono">${escapeHtml(s.sessionId || '-')}</td>
+          <td>${escapeHtml(s.provider || '-')}</td>
+          <td>${formatTime(s.createdAt)}</td>
+          <td>
+            <button onclick="window.partnersConsole.openTemplateModal('${escapeHtml(s.id)}')">Save as Template</button>
+            <button class="primary" onclick="window.partnersConsole.spawnFromSnapshot('${escapeHtml(s.id)}')">Restore</button>
+          </td>
+        </tr>
+      `).join('');
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color: var(--danger);">${err.message}</td></tr>`;
+    }
+  }
+
+  // Interactive PTY Terminal Logic
+  async function openTerminal(sessionId) {
+    ptySessionId.textContent = sessionId;
+    ptyStatusBadge.textContent = 'Connecting...';
+    ptyStatusBadge.className = 'badge badge-infra';
+    ptyTerminalOutput.innerHTML = `Connecting to PTY for session ${escapeHtml(sessionId)}...\n`;
+    terminalModal.classList.add('active');
+
+    try {
+      const initRes = await apiFetch(`/v1/sessions/${encodeURIComponent(sessionId)}/pty`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: '/bin/sh', cols: 80, rows: 24 }),
+      });
+      if (!initRes.ok) {
+        ptyTerminalOutput.innerHTML += `\nFailed to initialize PTY: HTTP ${initRes.status}\n`;
+        return;
+      }
+      const ptyInfo = await initRes.json();
+
+      // Determine WebSocket URL
+      const host = window.location.host;
+      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${proto}//${host}/v1/sessions/${encodeURIComponent(sessionId)}/pty`;
+
+      if (activePtyWebSocket) {
+        activePtyWebSocket.close();
+      }
+
+      activePtyWebSocket = new WebSocket(wsUrl);
+
+      activePtyWebSocket.onopen = () => {
+        ptyStatusBadge.textContent = 'Connected';
+        ptyStatusBadge.className = 'badge';
+        ptyStatusBadge.style.backgroundColor = 'rgba(34, 197, 94, 0.2)';
+        ptyStatusBadge.style.color = 'var(--success)';
+        ptyTerminalOutput.innerHTML += `Connected to interactive shell.\n`;
+        ptyInput.focus();
+      };
+
+      activePtyWebSocket.onmessage = (event) => {
+        ptyTerminalOutput.innerHTML += escapeHtml(event.data);
+        ptyTerminalOutput.scrollTop = ptyTerminalOutput.scrollHeight;
+      };
+
+      activePtyWebSocket.onclose = () => {
+        ptyStatusBadge.textContent = 'Disconnected';
+        ptyStatusBadge.className = 'badge';
+        ptyStatusBadge.style.backgroundColor = 'rgba(239, 68, 68, 0.2)';
+        ptyStatusBadge.style.color = 'var(--danger)';
+        ptyTerminalOutput.innerHTML += `\n[Session connection closed]\n`;
+      };
+
+      activePtyWebSocket.onerror = (err) => {
+        ptyTerminalOutput.innerHTML += `\n[WebSocket error]\n`;
+      };
+    } catch (err) {
+      ptyTerminalOutput.innerHTML += `\nError: ${err.message}\n`;
+    }
+  }
+
+  function sendPtyInput() {
+    const text = ptyInput.value;
+    if (!text || !activePtyWebSocket || activePtyWebSocket.readyState !== WebSocket.OPEN) return;
+    activePtyWebSocket.send(text + '\n');
+    ptyInput.value = '';
+  }
+
+  ptySendBtn.addEventListener('click', sendPtyInput);
+  ptyInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') sendPtyInput();
+  });
+
+  closeTerminalModal.addEventListener('click', () => {
+    if (activePtyWebSocket) activePtyWebSocket.close();
+    terminalModal.classList.remove('active');
+  });
+  closeTerminalModalBtn.addEventListener('click', () => {
+    if (activePtyWebSocket) activePtyWebSocket.close();
+    terminalModal.classList.remove('active');
+  });
+
+  // Snapshot Creation Modal Logic
+  function openSnapshotModal(sessionId) {
+    snapSessionId.value = sessionId;
+    snapLabel.value = `checkpoint-${Date.now().toString().slice(-4)}`;
+    snapshotModal.classList.add('active');
+  }
+
+  closeSnapshotModal.addEventListener('click', () => snapshotModal.classList.remove('active'));
+  cancelSnapshotBtn.addEventListener('click', () => snapshotModal.classList.remove('active'));
+
+  submitSnapshotBtn.addEventListener('click', async () => {
+    const sessionId = snapSessionId.value;
+    const label = snapLabel.value.trim() || 'default';
+    submitSnapshotBtn.disabled = true;
+    submitSnapshotBtn.textContent = 'Capturing...';
+    try {
+      const res = await apiFetch(`/v1/sessions/${encodeURIComponent(sessionId)}/snapshots`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label }),
+      });
+      if (!res.ok) {
+        alert('Failed to capture snapshot: ' + (await res.text()));
+        return;
+      }
+      snapshotModal.classList.remove('active');
+      switchTab('templates');
+    } catch (err) {
+      alert('Error: ' + err.message);
+    } finally {
+      submitSnapshotBtn.disabled = false;
+      submitSnapshotBtn.textContent = 'Capture Snapshot';
+    }
+  });
+
+  // Template Creation Modal Logic
+  function openTemplateModal(snapshotId) {
+    tplSnapshotId.value = snapshotId;
+    tplName.value = '';
+    tplDesc.value = '';
+    templateModal.classList.add('active');
+  }
+
+  closeTemplateModal.addEventListener('click', () => templateModal.classList.remove('active'));
+  cancelTemplateBtn.addEventListener('click', () => templateModal.classList.remove('active'));
+
+  submitTemplateBtn.addEventListener('click', async () => {
+    const snapshotId = tplSnapshotId.value;
+    const name = tplName.value.trim();
+    const description = tplDesc.value.trim();
+    if (!name) {
+      alert('Template name is required');
+      return;
+    }
+    submitTemplateBtn.disabled = true;
+    submitTemplateBtn.textContent = 'Saving...';
+    try {
+      const res = await apiFetch('/v1/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ snapshotId, name, description }),
+      });
+      if (!res.ok) {
+        alert('Failed to create template: ' + (await res.text()));
+        return;
+      }
+      templateModal.classList.remove('active');
+      loadTemplates();
+    } catch (err) {
+      alert('Error: ' + err.message);
+    } finally {
+      submitTemplateBtn.disabled = false;
+      submitTemplateBtn.textContent = 'Save Template';
+    }
+  });
+
+  async function spawnFromTemplate(templateId) {
+    if (!confirm(`Launch a new session from template ${templateId}?`)) return;
+    try {
+      const res = await apiFetch('/v1/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ templateId }),
+      });
+      if (!res.ok) {
+        alert('Failed to launch session: ' + (await res.text()));
+        return;
+      }
+      const data = await res.json();
+      alert(`Session ${data.id} launched successfully from template!`);
+      switchTab('sessions');
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
+  }
+
+  async function spawnFromSnapshot(snapshotId) {
+    if (!confirm(`Restore a new session from snapshot ${snapshotId}?`)) return;
+    try {
+      const res = await apiFetch('/v1/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ snapshotId }),
+      });
+      if (!res.ok) {
+        alert('Failed to restore session: ' + (await res.text()));
+        return;
+      }
+      const data = await res.json();
+      alert(`Session ${data.id} restored successfully from snapshot!`);
+      switchTab('sessions');
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
+  }
+
+  // Web Preview Modal Logic
+  function promptPreview(sessionId) {
+    const port = prompt(`Enter preview port inside session ${sessionId} (e.g. 3000, 5173, 8080):`, '3000');
+    if (!port) return;
+    openPreview(sessionId, port);
+  }
+
+  function openPreview(sessionId, port) {
+    const previewUrl = `/preview/${encodeURIComponent(sessionId)}/${encodeURIComponent(port)}/`;
+    previewTitle.textContent = `${sessionId} (port ${port})`;
+    previewOpenExtLink.href = previewUrl;
+    previewIframe.src = previewUrl;
+    previewModal.classList.add('active');
+  }
+
+  closePreviewModal.addEventListener('click', () => {
+    previewIframe.src = 'about:blank';
+    previewModal.classList.remove('active');
+  });
+  closePreviewModalBtn.addEventListener('click', () => {
+    previewIframe.src = 'about:blank';
+    previewModal.classList.remove('active');
+  });
+
   // Export to window for inline onclick handlers
   window.partnersConsole = {
     openJobStream,
     confirmCancelJob,
     confirmStopSession,
     openSessionWorkspace,
+    openTerminal,
+    openSnapshotModal,
+    openTemplateModal,
+    spawnFromTemplate,
+    spawnFromSnapshot,
+    promptPreview,
+    openPreview,
   };
 
   document.addEventListener('DOMContentLoaded', init);

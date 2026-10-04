@@ -61,6 +61,11 @@ test('Console server serves health, config, and static assets', async () => {
     assert.equal(proxyRes.status, 200);
     const proxyData = await proxyRes.json();
     assert.equal(proxyData.status, 'gateway_ok');
+
+    // 7. /preview/ses_test/3000/index.html -> proxies to mockGateway /preview/ses_test/3000/index.html
+    const previewRes = await fetch(`${consoleBaseUrl}/preview/ses_test/3000/index.html`);
+    // mockGateway returns 404 for this route as expected
+    assert.equal(previewRes.status, 404);
   } finally {
     await consoleInstance.close();
     await new Promise((resolve) => mockGateway.close(resolve));
