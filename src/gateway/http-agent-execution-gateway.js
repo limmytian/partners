@@ -7,6 +7,7 @@ import { extname } from 'node:path';
 
 import { GatewayServiceAuthorizer, redactAuthError } from '../security/gateway-service-auth.js';
 import { WebSocketStream } from './websocket-stream.js';
+import { proxyPreviewRequest, evaluateEgressPolicy, evaluatePreviewPortPolicy } from './preview-proxy.js';
 
 const TERMINAL_JOB_STATES = new Set(['succeeded', 'failed', 'timed_out', 'cancelled']);
 
@@ -105,6 +106,32 @@ async function routeRequest({ req, res, gateway, authorizer, eventBus, runningJo
   if (req.method === 'GET' && url.pathname === '/metrics') {
     res.writeHead(200, { 'Content-Type': 'text/plain; version=0.0.4; charset=utf-8' });
     return res.end(metrics?.prometheus?.() ?? '');
+  }
+
+  if (segments[0] === 'preview' && segments.length >= 3) {
+    const sessionId = segments[1];
+    const port = segments[2];
+    const subpath = '/' + segments.slice(3).join('/');
+
+    const session = await gateway.getSession(sessionId);
+    if (!session) {
+      return sendJson(res, 404, { error: 'Session not found' });
+    }
+
+    if (authorizer.enabled) {
+      await authorize({ req, authorizer, scope: 'sessions:read', resource: session });
+    }
+
+    const targetHost = session.sandboxIp ?? session.host ?? '127.0.0.1';
+    return proxyPreviewRequest({
+      req,
+      res,
+      sessionId,
+      port,
+      subpath,
+      targetHost,
+      session,
+    });
   }
 
   if (segments[0] !== 'v1') {
