@@ -112,7 +112,7 @@ export function redactSensitiveContent(content) {
     // Generic API keys, private keys, secrets
     .replace(/(-----BEGIN [A-Z0-9_-]+ PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9_-]+ PRIVATE KEY-----)/g, '[REDACTED PRIVATE KEY]')
     .replace(/(:\/\/[^:\/\s]+:)([^@\/\s]+)(@)/g, '$1[REDACTED]$3')
-    .replace(/((?:api[_-]?key|secret|password|passwd|token|bearer|credential|auth)\s*[:=]\s*["']?)([^"'\r\n\s]+)(["']?)/gi, (match, prefix, val, suffix) => {
+    .replace(/((?:api[_-]?key|secret[_-]?key|secret|password|passwd|token|bearer|credential|auth|private[_-]?key)\s*[:=]\s*["']?)([^"'\r\n\s]+)(["']?)/gi, (match, prefix, val, suffix) => {
       if (val.startsWith('[REDACTED')) {
         return match;
       }

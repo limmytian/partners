@@ -104,6 +104,34 @@ export class InMemoryAgentExecutionGateway {
     return this.store.listSessions?.(options) ?? [];
   }
 
+  async listSessionWorkspaceTree(sessionId, options = {}) {
+    if (!this.provider.listWorkspaceTree) {
+      throw Object.assign(new Error('Provider does not support workspace tree browsing'), { statusCode: 501 });
+    }
+    return this.provider.listWorkspaceTree(sessionId, options);
+  }
+
+  async readSessionWorkspaceFile(sessionId, filePath, options = {}) {
+    if (!this.provider.readWorkspaceFile) {
+      throw Object.assign(new Error('Provider does not support reading workspace files'), { statusCode: 501 });
+    }
+    return this.provider.readWorkspaceFile(sessionId, filePath, options);
+  }
+
+  async downloadSessionWorkspaceFile(sessionId, filePath) {
+    if (!this.provider.downloadWorkspaceFile) {
+      throw Object.assign(new Error('Provider does not support downloading workspace files'), { statusCode: 501 });
+    }
+    return this.provider.downloadWorkspaceFile(sessionId, filePath);
+  }
+
+  async downloadSessionWorkspaceArchive(sessionId, options = {}) {
+    if (!this.provider.downloadWorkspaceArchive) {
+      throw Object.assign(new Error('Provider does not support workspace archive downloads'), { statusCode: 501 });
+    }
+    return this.provider.downloadWorkspaceArchive(sessionId, options);
+  }
+
   async runJob(request, onEvent = () => {}) {
     assertExecutionJobRequest(request);
 

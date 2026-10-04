@@ -70,6 +70,42 @@ export class LocalSandboxProvider {
     return { ...session };
   }
 
+  async listWorkspaceTree(sessionId, options = {}) {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+    const { listWorkspaceTree } = await import('../workspaces/workspace-file-service.js');
+    return listWorkspaceTree(session.workspacePath, options);
+  }
+
+  async readWorkspaceFile(sessionId, filePath, options = {}) {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+    const { readWorkspaceFilePreview } = await import('../workspaces/workspace-file-service.js');
+    return readWorkspaceFilePreview(session.workspacePath, filePath, options);
+  }
+
+  async downloadWorkspaceFile(sessionId, filePath) {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+    const { createSingleFileDownloadStream } = await import('../workspaces/workspace-file-service.js');
+    return createSingleFileDownloadStream(session.workspacePath, filePath);
+  }
+
+  async downloadWorkspaceArchive(sessionId, options = {}) {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+    const { createArchiveDownloadStream } = await import('../workspaces/workspace-file-service.js');
+    return createArchiveDownloadStream(session.workspacePath, options);
+  }
+
   async runJob(request, onEvent = () => {}) {
     assertExecutionJobRequest(request);
 

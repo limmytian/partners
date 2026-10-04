@@ -15,6 +15,7 @@ export * from './security/gateway-service-auth.js';
 export * from './security/gateway-token-operations.js';
 export * from './security/workspace-security.js';
 export * from './workspaces/workspace-artifacts.js';
+export * from './workspaces/workspace-file-service.js';
 export * from './providers/local-sandbox-provider.js';
 export * from './providers/kubernetes-api.js';
 export * from './providers/kubernetes-sandbox-provider.js';

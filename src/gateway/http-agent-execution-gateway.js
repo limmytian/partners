@@ -188,6 +188,66 @@ async function routeRequest({ req, res, gateway, authorizer, eventBus, runningJo
       const session = await gateway.deleteSession(sessionId);
       return sendJson(res, 202, sanitizeSession(session));
     }
+    if (req.method === 'GET' && segments.length === 5 && segments[3] === 'workspace' && segments[4] === 'tree') {
+      const session = await gateway.getSession(sessionId);
+      if (!session) {
+        return sendJson(res, 404, { error: 'Session not found' });
+      }
+      await authorize({ req, authorizer, scope: 'sessions:read', resource: session });
+      const subpath = url.searchParams.get('path') || '.';
+      const depth = Number.parseInt(url.searchParams.get('depth') || '3', 10);
+      const includeHidden = url.searchParams.get('includeHidden') !== 'false';
+      const tree = await gateway.listSessionWorkspaceTree(sessionId, { subpath, depth, includeHidden });
+      return sendJson(res, 200, tree);
+    }
+    if (req.method === 'GET' && segments.length === 5 && segments[3] === 'workspace' && segments[4] === 'file') {
+      const session = await gateway.getSession(sessionId);
+      if (!session) {
+        return sendJson(res, 404, { error: 'Session not found' });
+      }
+      await authorize({ req, authorizer, scope: 'sessions:read', resource: session });
+      const filePath = url.searchParams.get('path');
+      if (!filePath) {
+        return sendJson(res, 400, { error: 'Query parameter "path" is required' });
+      }
+      const allowSensitiveRedact = url.searchParams.get('redact') !== 'false';
+      const preview = await gateway.readSessionWorkspaceFile(sessionId, filePath, { allowSensitiveRedact });
+      return sendJson(res, 200, preview);
+    }
+    if (req.method === 'GET' && segments.length === 5 && segments[3] === 'workspace' && segments[4] === 'download') {
+      const session = await gateway.getSession(sessionId);
+      if (!session) {
+        return sendJson(res, 404, { error: 'Session not found' });
+      }
+      await authorize({ req, authorizer, scope: 'sessions:read', resource: session });
+      const filePath = url.searchParams.get('path');
+      const archive = url.searchParams.get('archive') === 'true' || !filePath;
+
+      if (!archive) {
+        const { stream, filename, sizeBytes, mimeType } = await gateway.downloadSessionWorkspaceFile(sessionId, filePath);
+        res.writeHead(200, {
+          'Content-Type': mimeType,
+          'Content-Length': sizeBytes,
+          'Content-Disposition': `attachment; filename="${safeHeaderFilename(filename)}"`,
+          'X-Content-Type-Options': 'nosniff',
+          'Content-Security-Policy': "default-src 'none'",
+        });
+        return stream.pipe(res);
+      }
+
+      const pathsParam = url.searchParams.get('paths');
+      const paths = pathsParam ? pathsParam.split(',').map((p) => p.trim()).filter(Boolean) : (filePath ? [filePath] : ['.']);
+      const archiveName = url.searchParams.get('archiveName') || `session-${sessionId}-workspace.tar.gz`;
+      const { stream, filename } = await gateway.downloadSessionWorkspaceArchive(sessionId, { paths, archiveName });
+
+      res.writeHead(200, {
+        'Content-Type': 'application/gzip',
+        'Content-Disposition': `attachment; filename="${safeHeaderFilename(filename)}"`,
+        'X-Content-Type-Options': 'nosniff',
+        'Content-Security-Policy': "default-src 'none'",
+      });
+      return stream.pipe(res);
+    }
     if (req.method === 'POST' && ['stop', 'archive'].includes(segments[3])) {
       return sendJson(res, 501, { error: `${segments[3]} session is not implemented yet` });
     }
