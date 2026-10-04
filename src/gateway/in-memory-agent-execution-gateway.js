@@ -132,6 +132,20 @@ export class InMemoryAgentExecutionGateway {
     return this.provider.downloadWorkspaceArchive(sessionId, options);
   }
 
+  async syncSessionWorkspaceFiles(sessionId, files = [], options = {}) {
+    if (!this.provider.syncWorkspaceFiles) {
+      throw Object.assign(new Error('Provider does not support workspace file sync'), { statusCode: 501 });
+    }
+    return this.provider.syncWorkspaceFiles(sessionId, files, options);
+  }
+
+  async extractSessionWorkspaceArchive(sessionId, archiveBuffer, options = {}) {
+    if (!this.provider.extractWorkspaceArchive) {
+      throw Object.assign(new Error('Provider does not support workspace archive extraction'), { statusCode: 501 });
+    }
+    return this.provider.extractWorkspaceArchive(sessionId, archiveBuffer, options);
+  }
+
   async createSessionPty(sessionId, options = {}) {
     if (!this.provider.createPtySession) {
       throw Object.assign(new Error('Provider does not support interactive PTY sessions'), { statusCode: 501 });

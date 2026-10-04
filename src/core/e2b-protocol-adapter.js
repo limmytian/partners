@@ -160,6 +160,21 @@ export class E2BProtocolAdapter {
     });
   }
 
+  async syncFiles(files = []) {
+    return this.client.request('/v1/workspace/sync', {
+      method: 'POST',
+      body: { files },
+    });
+  }
+
+  async extractArchive(archiveBuffer) {
+    return this.client.request('/v1/workspace/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/gzip' },
+      body: archiveBuffer,
+    });
+  }
+
   // --- Process Execution Operations ---
   async startProcess(cmd, { cwd = '/workspace', env = {}, timeoutSeconds = 60 } = {}) {
     const argv = Array.isArray(cmd) ? cmd : ['/bin/sh', '-c', cmd];

@@ -397,3 +397,137 @@ export function guessMimeType(filePath) {
       return 'application/octet-stream';
   }
 }
+
+/**
+ * Synchronizes a list of files and directories into a workspace root.
+ * Validates path traversal boundaries and checks sensitivity policies.
+ *
+ * @param {string} rootPath - Absolute local path of the session workspace
+ * @param {Array<{ path: string, content?: string, contentBase64?: string, mode?: number }>} files
+ * @param {Object} [options]
+ * @param {boolean} [options.allowSensitive=false] - Whether to allow writing sensitive files
+ * @returns {Promise<{ written: Array<{ path: string, sizeBytes: number }>, count: number, totalBytes: number }>}
+ */
+export async function syncWorkspaceFiles(rootPath, files = [], options = {}) {
+  const allowSensitive = options.allowSensitive ?? false;
+  const written = [];
+  let totalBytes = 0;
+
+  for (const file of files) {
+    if (!file?.path || typeof file.path !== 'string') {
+      throw Object.assign(new Error('Each file must have a non-empty string "path"'), { statusCode: 400 });
+    }
+
+    const { resolvedPath, relativePath } = await assertSafeWorkspacePath(rootPath, file.path);
+
+    const sensitivity = evaluateFileSensitivity(relativePath);
+    if (sensitivity.isSensitive && sensitivity.action === 'block' && !allowSensitive) {
+      throw Object.assign(new Error(`Writing sensitive file is restricted by policy: ${relativePath}`), {
+        statusCode: 403,
+        code: 'ERR_SENSITIVE_FILE_BLOCKED',
+      });
+    }
+
+    let buf;
+    if (file.contentBase64 !== undefined) {
+      buf = Buffer.from(file.contentBase64, 'base64');
+    } else if (file.content !== undefined) {
+      buf = Buffer.from(String(file.content), 'utf8');
+    } else {
+      buf = Buffer.alloc(0);
+    }
+
+    await fs.mkdir(path.dirname(resolvedPath), { recursive: true });
+    await fs.writeFile(resolvedPath, buf, { mode: file.mode ?? 0o644 });
+
+    totalBytes += buf.byteLength;
+    written.push({
+      path: relativePath,
+      sizeBytes: buf.byteLength,
+    });
+  }
+
+  return {
+    written,
+    count: written.length,
+    totalBytes,
+  };
+}
+
+/**
+ * Extracts a tar.gz / tar buffer into the workspace root.
+ *
+ * @param {string} rootPath - Absolute local path of the session workspace
+ * @param {Buffer} archiveBuffer - Raw Buffer of tar or tar.gz archive
+ * @param {Object} [options]
+ * @param {boolean} [options.allowSensitive=false] - Whether sensitive files are allowed
+ * @returns {Promise<{ written: Array<{ path: string, sizeBytes: number }>, count: number, totalBytes: number }>}
+ */
+export async function extractTarGzToWorkspace(rootPath, archiveBuffer, options = {}) {
+  let tarBuffer;
+  try {
+    tarBuffer = zlib.gunzipSync(archiveBuffer);
+  } catch {
+    // If not gzipped, try raw tar
+    tarBuffer = archiveBuffer;
+  }
+
+  const entries = parseTarArchive(tarBuffer);
+  const files = [];
+
+  for (const entry of entries) {
+    if (entry.typeFlag === '5' || entry.name.endsWith('/')) {
+      // Directory entry
+      const { resolvedPath } = await assertSafeWorkspacePath(rootPath, entry.name);
+      await fs.mkdir(resolvedPath, { recursive: true });
+      continue;
+    }
+    files.push({
+      path: entry.name,
+      contentBase64: entry.data.toString('base64'),
+      mode: entry.mode,
+    });
+  }
+
+  return syncWorkspaceFiles(rootPath, files, options);
+}
+
+/**
+ * Internal helper to parse a POSIX ustar tar archive buffer.
+ */
+function parseTarArchive(buffer) {
+  const entries = [];
+  let offset = 0;
+
+  while (offset + 512 <= buffer.length) {
+    const header = buffer.subarray(offset, offset + 512);
+    offset += 512;
+
+    if (header.every((byte) => byte === 0)) {
+      break; // End of archive
+    }
+
+    const name = header.subarray(0, 100).toString('utf8').replace(/\0.*$/, '').trim();
+    if (!name) continue;
+
+    const modeStr = header.subarray(100, 108).toString('utf8').replace(/\0.*$/, '').trim();
+    const mode = Number.parseInt(modeStr, 8) || 0o644;
+
+    const sizeStr = header.subarray(124, 136).toString('utf8').replace(/\0.*$/, '').trim();
+    const size = Number.parseInt(sizeStr, 8) || 0;
+
+    const typeFlag = String.fromCharCode(header[156]) || '0';
+
+    if (offset + size > buffer.length) {
+      throw Object.assign(new Error(`Corrupted tar entry: ${name}`), { statusCode: 400 });
+    }
+
+    const data = Buffer.from(buffer.subarray(offset, offset + size));
+    offset += Math.ceil(size / 512) * 512;
+
+    entries.push({ name, mode, size, typeFlag, data });
+  }
+
+  return entries;
+}
+

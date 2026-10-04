@@ -266,6 +266,34 @@ async function routeRequest({ req, res, gateway, authorizer, eventBus, runningJo
       });
       return stream.pipe(res);
     }
+    if (req.method === 'POST' && segments.length === 5 && segments[3] === 'workspace' && segments[4] === 'sync') {
+      const session = await gateway.getSession(sessionId);
+      if (!session) {
+        return sendJson(res, 404, { error: 'Session not found' });
+      }
+      await authorize({ req, authorizer, scope: 'sessions:write', resource: session });
+
+      const contentType = (req.headers['content-type'] || '').toLowerCase();
+      const allowSensitive = url.searchParams.get('allowSensitive') === 'true';
+
+      let result;
+      if (contentType.includes('application/gzip') || contentType.includes('application/x-tar') || contentType.includes('application/octet-stream')) {
+        const buffer = await readBodyBuffer(req);
+        result = await gateway.extractSessionWorkspaceArchive(sessionId, buffer, { allowSensitive });
+      } else {
+        const body = await readJson(req);
+        const files = Array.isArray(body) ? body : (body.files ?? []);
+        result = await gateway.syncSessionWorkspaceFiles(sessionId, files, { allowSensitive });
+      }
+
+      return sendJson(res, 200, {
+        sessionId,
+        status: 'synced',
+        count: result.count,
+        totalBytes: result.totalBytes,
+        written: result.written,
+      });
+    }
     if (req.method === 'POST' && ['stop', 'archive'].includes(segments[3])) {
       return sendJson(res, 501, { error: `${segments[3]} session is not implemented yet` });
     }
@@ -535,6 +563,14 @@ async function readJson(req, { allowEmpty = false } = {}) {
   } catch {
     throw Object.assign(new Error('Invalid JSON request body'), { statusCode: 400 });
   }
+}
+
+async function readBodyBuffer(req) {
+  const chunks = [];
+  for await (const chunk of req) {
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
 }
 
 function sendJson(res, statusCode, payload) {

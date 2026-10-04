@@ -214,6 +214,24 @@ export class CubeSandboxProvider {
     return createArchiveDownloadStream(session.workspacePath, options);
   }
 
+  async syncWorkspaceFiles(sessionId, files = [], options = {}) {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+    const { syncWorkspaceFiles } = await import('../workspaces/workspace-file-service.js');
+    return syncWorkspaceFiles(session.workspacePath, files, options);
+  }
+
+  async extractWorkspaceArchive(sessionId, archiveBuffer, options = {}) {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+    const { extractTarGzToWorkspace } = await import('../workspaces/workspace-file-service.js');
+    return extractTarGzToWorkspace(session.workspacePath, archiveBuffer, options);
+  }
+
   async createPtySession(sessionId, options = {}) {
     const session = this.sessions.get(sessionId);
     if (!session) {

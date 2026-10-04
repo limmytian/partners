@@ -163,3 +163,143 @@ test('HTTP gateway: workspace tree, file preview, and download endpoints', async
     await close();
   }
 });
+
+test('workspace file service: syncs files and extracts tar archives safely', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'partners-ws-sync-'));
+
+  try {
+    const { syncWorkspaceFiles, extractTarGzToWorkspace } = await import('../src/workspaces/workspace-file-service.js');
+
+    // 1. Batch sync json files
+    const syncRes = await syncWorkspaceFiles(root, [
+      { path: 'docs/spec.md', content: '# Partners Spec' },
+      { path: 'src/config.json', content: JSON.stringify({ port: 8080 }) },
+      { path: 'images/pixel.bin', contentBase64: Buffer.from([0x01, 0x02, 0x03]).toString('base64') },
+    ]);
+
+    assert.equal(syncRes.count, 3);
+    assert.ok(syncRes.totalBytes > 0);
+    assert.equal(await fs.readFile(path.join(root, 'docs/spec.md'), 'utf8'), '# Partners Spec');
+    assert.deepEqual(await fs.readFile(path.join(root, 'images/pixel.bin')), Buffer.from([0x01, 0x02, 0x03]));
+
+    // 2. Sensitive file write blocked by default policy
+    await assert.rejects(
+      () => syncWorkspaceFiles(root, [{ path: '.env', content: 'SECRET=123' }]),
+      /Writing sensitive file is restricted by policy/
+    );
+
+    // 3. Path traversal blocked
+    await assert.rejects(
+      () => syncWorkspaceFiles(root, [{ path: '../../etc/passwd', content: 'hacked' }]),
+      /Path traversal detected|escapes workspace/i
+    );
+
+    // 4. Archive extraction test
+    const { createArchiveDownloadStream } = await import('../src/workspaces/workspace-file-service.js');
+    const archive = await createArchiveDownloadStream(root, { paths: ['docs'], archiveName: 'docs.tar.gz' });
+    const chunks = [];
+    for await (const chunk of archive.stream) chunks.push(chunk);
+    const archiveBuf = Buffer.concat(chunks);
+
+    const destDir = await fs.mkdtemp(path.join(os.tmpdir(), 'partners-ws-dest-'));
+    try {
+      const extractRes = await extractTarGzToWorkspace(destDir, archiveBuf);
+      assert.ok(extractRes.count >= 1);
+      assert.equal(await fs.readFile(path.join(destDir, 'docs/spec.md'), 'utf8'), '# Partners Spec');
+    } finally {
+      await fs.rm(destDir, { recursive: true, force: true });
+    }
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test('HTTP gateway: POST /v1/sessions/:id/workspace/sync handles JSON files and tar.gz streaming injection', async () => {
+  const provider = new LocalSandboxProvider();
+  const store = new InMemoryGatewayStore();
+  const gateway = new InMemoryAgentExecutionGateway({ provider, store });
+  const authorizer = new GatewayServiceAuthorizer({
+    tokens: [
+      { token: 'write-token', scopes: ['sessions:write', 'sessions:create', 'sessions:read'] },
+      { token: 'readonly-token', scopes: ['sessions:read'] },
+    ],
+  });
+  const { server, close } = createAgentExecutionGatewayServer({ gateway, authorizer });
+
+  await new Promise((resolve) => server.listen(0, resolve));
+  const port = server.address().port;
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  try {
+    const sessionRes = await fetch(`${baseUrl}/v1/sessions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer write-token',
+      },
+      body: JSON.stringify({ id: 'ses_sync_test' }),
+    });
+    assert.equal(sessionRes.status, 202);
+
+    // 1. Unauthorized sync attempt
+    const unauthRes = await fetch(`${baseUrl}/v1/sessions/ses_sync_test/workspace/sync`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer readonly-token',
+      },
+      body: JSON.stringify({ files: [{ path: 'a.txt', content: 'test' }] }),
+    });
+    assert.equal(unauthRes.status, 403);
+
+    // 2. Authorized JSON sync
+    const jsonSyncRes = await fetch(`${baseUrl}/v1/sessions/ses_sync_test/workspace/sync`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer write-token',
+      },
+      body: JSON.stringify({
+        files: [
+          { path: 'src/index.js', content: 'export const hello = "world";\n' },
+          { path: 'data/info.txt', content: 'some info\n' },
+        ],
+      }),
+    });
+    assert.equal(jsonSyncRes.status, 200);
+    const jsonResult = await jsonSyncRes.json();
+    assert.equal(jsonResult.status, 'synced');
+    assert.equal(jsonResult.count, 2);
+
+    // Verify file content via GET preview
+    const previewRes = await fetch(`${baseUrl}/v1/sessions/ses_sync_test/workspace/file?path=src/index.js`, {
+      headers: { Authorization: 'Bearer write-token' },
+    });
+    assert.equal(previewRes.status, 200);
+    const previewData = await previewRes.json();
+    assert.equal(previewData.content, 'export const hello = "world";\n');
+
+    // 3. Streaming tar.gz sync
+    const { createArchiveDownloadStream } = await import('../src/workspaces/workspace-file-service.js');
+    const internalSession = await provider.getSession('ses_sync_test');
+    const archiveStream = await createArchiveDownloadStream(internalSession.workspacePath, { paths: ['src'] });
+    const chunks = [];
+    for await (const chunk of archiveStream.stream) chunks.push(chunk);
+    const tarGzBuffer = Buffer.concat(chunks);
+
+    const streamSyncRes = await fetch(`${baseUrl}/v1/sessions/ses_sync_test/workspace/sync`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/gzip',
+        Authorization: 'Bearer write-token',
+      },
+      body: tarGzBuffer,
+    });
+    assert.equal(streamSyncRes.status, 200);
+    const streamResult = await streamSyncRes.json();
+    assert.equal(streamResult.status, 'synced');
+    assert.ok(streamResult.count >= 1);
+  } finally {
+    await close();
+  }
+});
