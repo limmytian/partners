@@ -23,5 +23,6 @@ export * from './gateway/preview-proxy.js';
 export * from './gateway/warm-pool-manager.js';
 export * from './providers/local-sandbox-provider.js';
 export * from './providers/cubesandbox-provider.js';
+export * from './providers/cubesandbox-client.js';
 export * from './providers/kubernetes-api.js';
 export * from './providers/kubernetes-sandbox-provider.js';

@@ -8,6 +8,7 @@ import {
   KubernetesSandboxProvider,
   LocalArtifactStore,
   LocalSandboxProvider,
+  CubeSandboxProvider,
   PostgresGatewayStore,
   S3ArtifactStore,
   createGatewayMetrics,
@@ -148,6 +149,13 @@ function buildProvider({ workRoot: rootDir }) {
   if (requested === 'kubernetes' || requested === 'k8s') {
     return new KubernetesSandboxProvider();
   }
+  if (requested === 'cubesandbox' || requested === 'cube') {
+    return new CubeSandboxProvider({
+      rootDir,
+      endpoint: process.env.CUBESANDBOX_ENDPOINT,
+      apiKey: process.env.CUBESANDBOX_API_KEY,
+    });
+  }
   if (requested !== 'local') {
     throw new Error(`Unsupported GATEWAY_PROVIDER: ${requested}`);
   }
@@ -157,15 +165,18 @@ function buildProvider({ workRoot: rootDir }) {
 async function readinessStatus() {
   const storeHealth = await store.healthCheck?.();
   const artifactHealth = await artifactStore.healthCheck?.();
-  const dependenciesReady = [storeHealth, artifactHealth]
+  const providerHealth = await provider.healthCheck?.();
+  const dependenciesReady = [storeHealth, artifactHealth, providerHealth]
     .filter(Boolean)
-    .every((health) => health.status === 'ready');
+    .every((health) => health.status === 'ready' || health.healthy === true || health.status === 'ok');
   return {
     status: ready && dependenciesReady ? 'ready' : 'starting',
     store: storeKind,
     storeHealth: storeHealth ?? undefined,
     artifactStore: artifactStoreKind,
     artifactStoreHealth: artifactHealth ?? undefined,
+    provider: provider.name,
+    providerHealth: providerHealth ?? undefined,
   };
 }
 

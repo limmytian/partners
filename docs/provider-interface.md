@@ -68,8 +68,20 @@ It maps:
 - request resources, deadlines, RuntimeClass, and storage policy to Kubernetes objects
 - gateway startup reconciliation to expired job cleanup and retained-PVC session recovery
 
+### CubeSandboxProvider
+
+`CubeSandboxProvider` is the dedicated hardware-virtualized MicroVM provider. It delegates execution, storage, and snapshots to a CubeSandbox daemon service or runs local MicroVM simulation.
+
+It maps:
+
+- sub-60ms cold start microVM sessions with hardware KVM isolation and independent kernels
+- remote command execution with live stdout/stderr event streaming and cooperative cancellation
+- workspace directory tree inspection, file preview, and bidirectional tar.gz archive synchronization
+- millisecond-level CubeCoW memory/filesystem snapshots and instant branch forks (`createSnapshot`, `forkFromSnapshot`)
+- interactive terminal sessions over WebSocket PTY channels
+
 ## Runtime Notes
 
-The gateway uses `LocalSandboxProvider` for unit tests and local control-plane development. Staging and production-shaped self-hosting use `KubernetesSandboxProvider` with a dedicated namespace, RBAC, NetworkPolicy, resource policy, and an explicit RuntimeClass where stronger isolation is required.
+The gateway uses `LocalSandboxProvider` for unit tests and local control-plane development. Staging and production-shaped self-hosting use `KubernetesSandboxProvider` or `CubeSandboxProvider` depending on whether container Pods or dedicated MicroVMs are required.
 
 Runtime configuration and operational constraints are documented in [kubernetes-sandbox-provider.md](kubernetes-sandbox-provider.md) and [kubernetes-runtime-runbook.md](kubernetes-runtime-runbook.md).
