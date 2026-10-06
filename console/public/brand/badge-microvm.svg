@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="138" height="20" role="img" aria-label="sandbox: MicroVM">
+  <linearGradient id="b" x2="0" y2="100%"><stop offset="0" stop-color="#bbb" stop-opacity=".1"/><stop offset="1" stop-opacity=".1"/></linearGradient>
+  <clipPath id="a"><rect width="138" height="20" rx="3" fill="#fff"/></clipPath>
+  <g clip-path="url(#a)">
+    <rect width="60" height="20" fill="#24292e"/>
+    <rect x="60" width="78" height="20" fill="#6366f1"/>
+    <rect width="138" height="20" fill="url(#b)"/>
+  </g>
+  <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" text-rendering="geometricPrecision" font-size="110">
+    <text aria-hidden="true" x="310" y="150" fill="#010101" fill-opacity=".3" transform="scale(.1)">sandbox</text>
+    <text x="310" y="140" transform="scale(.1)" fill="#fff">sandbox</text>
+    <text aria-hidden="true" x="980" y="150" fill="#010101" fill-opacity=".3" transform="scale(.1)">MicroVM</text>
+    <text x="980" y="140" transform="scale(.1)" fill="#fff">MicroVM</text>
+  </g>
+</svg>

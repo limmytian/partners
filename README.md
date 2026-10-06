@@ -1,10 +1,22 @@
-# Partners
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/partners-logo-horizontal-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="assets/brand/partners-logo-horizontal-light.png">
+    <img src="assets/brand/partners-logo-horizontal-dark.png" alt="Partners - AI Agent Execution Gateway" width="600">
+  </picture>
+</p>
 
-> A provider-agnostic, secure, and Kubernetes-native execution gateway and sandbox infrastructure for AI agents.
+<p align="center">
+  <strong>Provider-Agnostic, Secure, and Kubernetes-Native Execution Gateway &amp; Sandbox Control Plane for Autonomous AI Agents</strong>
+</p>
 
-[![CI](https://github.com/limmytian/partners/actions/workflows/ci.yml/badge.svg)](https://github.com/limmytian/partners/actions/workflows/ci.yml)
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)](package.json)
+<p align="center">
+  <a href="https://github.com/limmytian/partners/actions/workflows/ci.yml"><img src="https://github.com/limmytian/partners/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"></a>
+  <a href="package.json"><img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg" alt="Node.js"></a>
+  <img src="assets/brand/badge-agnostic.svg" alt="Provider: Agnostic">
+  <img src="assets/brand/badge-microvm.svg" alt="Sandbox: MicroVM">
+</p>
 
 ---
 
