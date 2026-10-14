@@ -1,0 +1,52 @@
+{
+  "version": "0.1.4",
+  "sourceSha": "e47689716ac16f8bdccaeba7d7d6d12533a368a4",
+  "verifiedAt": "2026-10-14T10:39:07.165154+00:00",
+  "context": "default",
+  "namespace": "partners",
+  "buildRun": "https://github.com/limmytian/partners/actions/runs/38550418826",
+  "mainCI": "https://github.com/limmytian/partners/actions/runs/38550385991",
+  "imageDigests": {
+    "sandbox": "sha256:a06b9d8fcce8760b8f0f2b45e2005bba3bb34c09a826b9ddae97024e1a71a9f4",
+    "gateway": "sha256:c7814fbfebabb271b8f57d2f2df1c69a9a59530427fb6269491a99c589a464cb",
+    "console": "sha256:1eb7c6bccf310a0ccf5ccd0783f712ec3ea33ac2e4ccbf3df7ed4cbf49db9bfd"
+  },
+  "pods": [
+    {
+      "component": "gateway",
+      "pod": "partners-gateway-5c86f4874f-sxwp8",
+      "node": "dell-r730",
+      "image": "ghcr.io/limmytian/partners-gateway:v0.1.4@sha256:c7814fbfebabb271b8f57d2f2df1c69a9a59530427fb6269491a99c589a464cb",
+      "imageID": "ghcr.io/limmytian/partners-gateway@sha256:c7814fbfebabb271b8f57d2f2df1c69a9a59530427fb6269491a99c589a464cb",
+      "ready": true,
+      "restartCount": 0
+    },
+    {
+      "component": "console",
+      "pod": "partners-console-95b67578d-s86xj",
+      "node": "dell-r730",
+      "image": "ghcr.io/limmytian/partners-console:v0.1.4@sha256:1eb7c6bccf310a0ccf5ccd0783f712ec3ea33ac2e4ccbf3df7ed4cbf49db9bfd",
+      "imageID": "ghcr.io/limmytian/partners-console@sha256:1eb7c6bccf310a0ccf5ccd0783f712ec3ea33ac2e4ccbf3df7ed4cbf49db9bfd",
+      "ready": true,
+      "restartCount": 0
+    }
+  ],
+  "mcp": {
+    "run": "19345bb0-d97c-4b3a-90d0-cb0c965946f6",
+    "cases": [
+      "health-readiness-metrics-unauthenticated-denial",
+      "seven-tools",
+      "files-execution-unicode-idempotency",
+      "authenticated-s3-stdout-stderr-download",
+      "confirmed-remote-cancellation",
+      "confirmed-remote-timeout"
+    ],
+    "jobId": "job_e7c5384c-fdb5-400c-9421-e25db2180592",
+    "status": "passed"
+  },
+  "rest": {
+    "status": "passed",
+    "case": "REST execution and SSE replay",
+    "jobId": "job_deploy_rest_03ad6ddf-381f-4c56-ae7d-3ef9e7313314"
+  }
+}

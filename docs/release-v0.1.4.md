@@ -9,3 +9,5 @@ MCP is disabled by default. Enable `GATEWAY_MCP_ENABLED=1` with the authenticati
 Validation: 147 automated tests, 146 passed, 0 failed, one conditional MinIO test skipped. Real Dell CubeSandbox acceptance passed file/exec/replay, Unicode pagination, artifact download, cancel/timeout, Gateway restart, killed-worker recovery and idle TTL reclamation. See [the evidence](sandbox-mcp-validation.md).
 
 Release preparation does not attest a production image build or rollout. Packaging publishes paired Gateway/sandbox images; deployment uses their immutable digests through [the existing release flow](gateway-release.md).
+
+Deployment completed on 2026-10-14; see [the deployment record](release-v0.1.4-deployment.md).
