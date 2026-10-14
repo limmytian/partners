@@ -1,3 +1,4 @@
+import { localWorkspaceFileOperation } from '../mcp/file-operation.js';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import {
@@ -113,6 +114,12 @@ export class LocalSandboxProvider {
     session.updatedAt = new Date().toISOString();
     this.sessions.delete(sessionId);
     return { ...session };
+  }
+
+  async mcpFileOperation(sessionId, args) {
+    const session = await this.getSession(sessionId);
+    if (!session) throw Object.assign(new Error('Session not found'), { code: 'NOT_FOUND' });
+    return localWorkspaceFileOperation(session.workspacePath, args);
   }
 
   async listWorkspaceTree(sessionId, options = {}) {
@@ -260,6 +267,7 @@ export class LocalSandboxProvider {
         exitCode: run.exitCode,
         stdout: run.stdout,
         stderr: run.stderr,
+        outputTruncated: run.outputTruncated,
         artifacts,
         events,
         completedAt: new Date().toISOString(),
@@ -332,45 +340,59 @@ export class LocalSandboxProvider {
       env: childEnv,
       signal,
       stdio: ['ignore', 'pipe', 'pipe'],
+      detached: process.platform !== 'win32',
     });
 
+    const kill = (signal) => {
+      try { if (process.platform !== 'win32') process.kill(-child.pid, signal); else child.kill(signal); } catch {}
+    };
+    let killTimer;
+    const terminate = () => { kill('SIGTERM'); killTimer ??= setTimeout(() => kill('SIGKILL'), 1000); killTimer.unref(); };
     let stdout = '';
     let stderr = '';
+    let outputTruncated = false;
     let timedOut = false;
     let cancelled = false;
     const timeout = setTimeout(() => {
       timedOut = true;
-      child.kill('SIGTERM');
+      terminate();
     }, timeoutSeconds * 1000);
 
     signal.addEventListener('abort', () => {
       cancelled = true;
-      child.kill('SIGTERM');
+      terminate();
     });
 
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
     child.stdout.on('data', (chunk) => {
-      stdout += chunk;
-      emit('log.stdout', { chunk });
+      const remaining = 16 * 1024 * 1024 - Buffer.byteLength(stdout) - Buffer.byteLength(stderr);
+      if (Buffer.byteLength(chunk) > remaining) outputTruncated = true;
+      if (remaining <= 0) return;
+      const bounded = Buffer.from(chunk).subarray(0, remaining).toString('utf8').replace(/\uFFFD$/, '');
+      stdout += bounded;
+      emit('log.stdout', { chunk: bounded });
     });
     child.stderr.on('data', (chunk) => {
-      stderr += chunk;
-      emit('log.stderr', { chunk });
+      const remaining = 16 * 1024 * 1024 - Buffer.byteLength(stdout) - Buffer.byteLength(stderr);
+      if (Buffer.byteLength(chunk) > remaining) outputTruncated = true;
+      if (remaining <= 0) return;
+      const bounded = Buffer.from(chunk).subarray(0, remaining).toString('utf8').replace(/\uFFFD$/, '');
+      stderr += bounded;
+      emit('log.stderr', { chunk: bounded });
     });
 
     const exitCode = await new Promise((resolve, reject) => {
       child.once('error', (error) => {
         if (error?.name === 'AbortError' || error?.code === 'ABORT_ERR') {
-          resolve(1);
           return;
         }
         reject(error);
       });
       child.once('close', (code) => resolve(code ?? 1));
-    }).finally(() => clearTimeout(timeout));
+    }).finally(() => { clearTimeout(timeout); if (killTimer) clearTimeout(killTimer); });
 
-    return { exitCode, stdout, stderr, timedOut, cancelled };
+    return { exitCode, stdout, stderr, timedOut, cancelled, outputTruncated };
   }
 
   async #collectArtifacts({ jobId, workspacePath, stdout, stderr, policy = {} }) {

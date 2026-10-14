@@ -11,6 +11,11 @@ export class GatewayServiceAuthorizer {
     return this.tokens.length > 0 || Boolean(this.tokenStore);
   }
 
+  async authenticate({ headers = {} } = {}) {
+    if (!this.enabled) throw authError(401, 'Authentication is required');
+    return this.authorize({ headers });
+  }
+
   async authorize({ headers = {}, scope, tenantId, projectId } = {}) {
     if (!this.enabled) {
       return {
@@ -42,7 +47,7 @@ export class GatewayServiceAuthorizer {
       await this.#recordAudit({ scope, tenantId, projectId, token, outcome: 'denied', reason: 'Bearer token revoked' });
       throw authError(401, 'Bearer token revoked');
     }
-    if (!hasScope(token.scopes, scope)) {
+    if (scope && !hasScope(token.scopes, scope)) {
       await this.#recordAudit({ scope, tenantId, projectId, token, outcome: 'denied', reason: `Missing required scope: ${scope}` });
       throw authError(403, `Missing required scope: ${scope}`);
     }

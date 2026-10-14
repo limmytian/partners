@@ -14,6 +14,8 @@ export function createGatewayMetrics({
   const jobsRunning = new Map();
   const providerDuration = new Map();
   const artifactFailures = new Map();
+  const mcpCalls = new Map();
+  const mcpDuration = new Map();
 
   return {
     recordRequest({ method, path, statusCode, durationMs }) {
@@ -21,6 +23,12 @@ export function createGatewayMetrics({
       requests.totalDurationMs += boundedNumber(durationMs);
       increment(requests.byStatus, labelsKey({ status_class: `${Math.floor(statusCode / 100)}xx` }));
       increment(requests.byRoute, labelsKey({ route: `${method} ${path}` }));
+    },
+
+    recordMcpCall({ tool, code, durationMs }) {
+      const labels = { tool: ['session_create','session_get','session_delete','bash_exec','job_get','job_cancel','file_ops'].includes(tool) ? tool : 'unknown', outcome: code ? 'error' : 'success' };
+      const key = labelsKey(labels); increment(mcpCalls, key);
+      mcpDuration.set(key, (mcpDuration.get(key) ?? 0) + boundedNumber(durationMs));
     },
 
     recordJobStarted({ executionMode, provider }) {
@@ -65,6 +73,8 @@ export function createGatewayMetrics({
       appendMap(lines, jobsRunning, 'partners_gateway_jobs_running', 'gauge');
       appendDuration(lines, providerDuration);
       appendPostgresPool(lines, storeStats());
+      appendMap(lines, mcpCalls, 'partners_gateway_mcp_tool_calls_total', 'counter');
+      appendMap(lines, mcpDuration, 'partners_gateway_mcp_tool_duration_ms_total', 'counter');
       appendMap(lines, artifactFailures, 'partners_gateway_artifact_failures_total', 'counter');
 
       return `${lines.join('\n')}\n`;

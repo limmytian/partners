@@ -162,7 +162,7 @@ export class PostgresGatewayStore {
   }
 
   async migrate() {
-    await this.#execute([{ name: 'migrate', sql: POSTGRES_GATEWAY_SCHEMA }]);
+    await this.#execute([{ name: 'migrate', sql: "BEGIN; SELECT pg_advisory_xact_lock(hashtext('partners_gateway_schema'));\n" + POSTGRES_GATEWAY_SCHEMA + '\nCOMMIT;' }]);
   }
 
   async nextEventSequence() {
@@ -251,6 +251,16 @@ export class PostgresGatewayStore {
       values,
     });
     return result.rows.map((row) => clone(row.record));
+  }
+
+  async countActiveSessions(tenantId) {
+    const result = await this.#single({ name: 'countActiveSessions', sql: "SELECT count(*)::integer AS count FROM gateway_sessions WHERE tenant_id=$1 AND state <> 'deleted'", values: [tenantId] });
+    return result.rows[0].count;
+  }
+
+  async countActiveJobs(tenantId) {
+    const result = await this.#single({ name: 'countActiveJobs', sql: "SELECT count(*)::integer AS count FROM gateway_jobs WHERE tenant_id=$1 AND state NOT IN ('succeeded','failed','timed_out','cancelled')", values: [tenantId] });
+    return result.rows[0].count;
   }
 
   async saveJob(job) {
@@ -395,16 +405,16 @@ export class PostgresGatewayStore {
     return clone(result.rows[0].record);
   }
 
-  async listJobEvents(jobId, { afterSequence = 0 } = {}) {
+  async listJobEvents(jobId, { afterSequence = 0, limit = 2147483647 } = {}) {
     const result = await this.#single({
       name: 'listJobEvents',
       sql: `
         SELECT record
         FROM gateway_job_events
         WHERE job_id = $1 AND sequence > $2
-        ORDER BY sequence ASC
+        ORDER BY sequence ASC LIMIT $3
       `,
-      values: [jobId, afterSequence],
+      values: [jobId, afterSequence, limit],
     });
     return result.rows.map((row) => clone(row.record));
   }
@@ -968,6 +978,7 @@ export class PgPoolPostgresRunner {
       }
       return { results };
     } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
       const name = activeStatement?.name ?? 'statement';
       throw new Error(`PostgresGatewayStore query failed in ${name}: ${error.message}`);
     } finally {

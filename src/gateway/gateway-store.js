@@ -38,6 +38,10 @@ export class InMemoryGatewayStore {
     return list.slice(offset, offset + limit).map(clone);
   }
 
+  countActiveSessions(tenantId) { return [...this.sessions.values()].filter(s => s.tenantId === tenantId && s.state !== 'deleted').length; }
+
+  countActiveJobs(tenantId) { return [...this.jobs.values()].filter(j => j.tenantId === tenantId && !['succeeded','failed','timed_out','cancelled'].includes(j.state)).length; }
+
   saveJob(job) {
     this.jobs.set(job.id, clone(job));
     return clone(job);
@@ -75,9 +79,10 @@ export class InMemoryGatewayStore {
     return clone(stored);
   }
 
-  listJobEvents(jobId, { afterSequence = 0 } = {}) {
+  listJobEvents(jobId, { afterSequence = 0, limit = Number.MAX_SAFE_INTEGER } = {}) {
     return (this.events.get(jobId) ?? [])
       .filter((event) => event.sequence > afterSequence)
+      .slice(0, limit)
       .map(clone);
   }
 

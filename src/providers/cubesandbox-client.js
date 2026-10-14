@@ -1,3 +1,5 @@
+import { StringDecoder } from 'node:string_decoder';
+
 /**
  * CubeSandboxClient: Lightweight HTTP REST client for communicating with the
  * CubeSandbox MicroVM daemon service.
@@ -40,16 +42,8 @@ export class CubeSandboxClient {
       payload = JSON.stringify(body);
     }
 
-    let timeoutController;
-    let effectiveSignal = signal;
-    if (!signal && timeoutMs > 0) {
-      timeoutController = new AbortController();
-      const timer = setTimeout(() => timeoutController.abort(new Error(`Request timed out after ${timeoutMs}ms`)), timeoutMs);
-      effectiveSignal = timeoutController.signal;
-      if (typeof timer.unref === 'function') {
-        timer.unref();
-      }
-    }
+    const timeoutSignal = timeoutMs > 0 ? AbortSignal.timeout(timeoutMs) : null;
+    const effectiveSignal = signal && timeoutSignal ? AbortSignal.any([signal, timeoutSignal]) : signal ?? timeoutSignal;
 
     try {
       const response = await this.fetchImpl(url, {
@@ -137,6 +131,7 @@ export class CubeSandboxClient {
         signal: options.signal,
       });
     } catch (err) {
+      if (![404, 405].includes(err.status)) throw err;
       // Fall back to CubeAPI E2B-compatible route: POST /sandboxes with templateID
       const tpl = request.templateId ?? this.templateId;
       const res = await this.request('/sandboxes', {
@@ -212,25 +207,24 @@ export class CubeSandboxClient {
   // --- Command & Job Execution ---
 
   async exec(sandboxId, request = {}, options = {}) {
-    try {
-      // 1. Try standard mock server route /v1/sandboxes/:id/exec
-      const rawRes = await this.request(`/v1/sandboxes/${encodeURIComponent(sandboxId)}/exec`, {
-        method: 'POST',
-        body: request,
-        signal: options.signal,
-        rawResponse: true,
-      });
-
-      if (rawRes.ok) {
-        const contentType = rawRes.headers.get('content-type') ?? '';
-        if (contentType.includes('text/event-stream') || contentType.includes('application/x-ndjson')) {
-          return this._consumeStream(rawRes, options.onChunk);
-        }
-        return await rawRes.json();
+    // Fallback is permitted only when the endpoint is unsupported. A lost
+    // response or authorization failure must never execute the command twice.
+    const rawRes = await this.request(`/v1/sandboxes/${encodeURIComponent(sandboxId)}/exec`, {
+      method: 'POST', body: request, signal: options.signal, rawResponse: true,
+      timeoutMs: ((request.timeoutSeconds ?? 120) + 30) * 1000,
+    });
+    if (rawRes.ok) {
+      const contentType = rawRes.headers.get('content-type') ?? '';
+      if (contentType.includes('text/event-stream') || contentType.includes('application/x-ndjson')) {
+        return this._consumeStream(rawRes, options.onChunk);
       }
-    } catch (err) {
-      // ignore and try envd
+      const result = JSON.parse((await readBoundedResponse(rawRes)).toString('utf8'));
+      if (result.stdout) options.onChunk?.({ type: 'stdout', data: result.stdout });
+      if (result.stderr) options.onChunk?.({ type: 'stderr', data: result.stderr });
+      return result;
     }
+    if (![404, 405].includes(rawRes.status)) throw new Error(`CubeSandbox exec rejected: HTTP ${rawRes.status}`);
+    await rawRes.body?.cancel();
 
     // 2. Real MicroVM execution via CubeProxy / envd Connect protocol
     const argv = request.argv ?? (request.command?.argv) ?? (request.code ? ['node', '-e', request.code] : ['/bin/true']);
@@ -268,39 +262,43 @@ export class CubeSandboxClient {
       throw new Error(`CubeSandbox envd exec failed: HTTP ${res.status}`);
     }
 
-    const ab = await res.arrayBuffer();
-    const buf = Buffer.from(ab);
-
-    let stdout = '';
-    let stderr = '';
-    let exitCode = 0;
-    let idx = 0;
-
-    while (idx < buf.length) {
-      const flag = buf.readUInt8(idx);
-      const len = buf.readUInt32BE(idx + 1);
-      const frameBuf = buf.subarray(idx + 5, idx + 5 + len);
-      idx += 5 + len;
-      try {
-        const json = JSON.parse(frameBuf.toString('utf-8'));
-        if (json?.event?.data?.stdout) {
-          const text = Buffer.from(json.event.data.stdout, 'base64').toString('utf-8');
-          stdout += text;
-          if (options.onChunk) options.onChunk({ type: 'stdout', data: text });
+    let stdout = '', stderr = '', exitCode = null;
+    const stdoutDecoder = new StringDecoder('utf8'), stderrDecoder = new StringDecoder('utf8');
+    const reader = res.body.getReader(); let buffered = Buffer.alloc(0), received = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) { if (buffered.length) throw new Error('Malformed envd frame'); break; }
+        received += value.byteLength;
+        if (received > 16 * 1024 * 1024) throw new Error('CubeSandbox response limit exceeded');
+        buffered = Buffer.concat([buffered, Buffer.from(value)]);
+        while (buffered.length >= 5) {
+          const flag = buffered[0], length = buffered.readUInt32BE(1);
+          if (length > 16 * 1024 * 1024 || (flag & 1)) throw new Error('Unsupported envd frame');
+          if (buffered.length < 5 + length) break;
+          const frame = buffered.subarray(5, 5 + length); buffered = buffered.subarray(5 + length);
+          const message = JSON.parse(frame.toString('utf8'));
+          if (message.error) throw new Error('envd execution stream failed');
+          const event = message.event;
+          if (event?.data?.stdout) {
+            const text = stdoutDecoder.write(Buffer.from(event.data.stdout, 'base64'));
+            stdout += text; if (text) options.onChunk?.({ type: 'stdout', data: text });
+          }
+          if (event?.data?.stderr) {
+            const text = stderrDecoder.write(Buffer.from(event.data.stderr, 'base64'));
+            stderr += text; if (text) options.onChunk?.({ type: 'stderr', data: text });
+          }
+          if (event?.end) exitCode = event.end.exitCode ?? (event.end.exited ? 0 : 1);
         }
-        if (json?.event?.data?.stderr) {
-          const text = Buffer.from(json.event.data.stderr, 'base64').toString('utf-8');
-          stderr += text;
-          if (options.onChunk) options.onChunk({ type: 'stderr', data: text });
-        }
-        if (json?.event?.end) {
-          exitCode = json.event.end.exitCode ?? (json.event.end.exited ? 0 : 1);
-        }
-      } catch {
-        // ignore frame parse errors
       }
-    }
+    } catch (error) { await reader.cancel().catch(() => {}); throw error; }
+    finally { reader.releaseLock(); }
 
+    const stdoutTail = stdoutDecoder.end(), stderrTail = stderrDecoder.end();
+    stdout += stdoutTail; stderr += stderrTail;
+    if (stdoutTail) options.onChunk?.({ type: 'stdout', data: stdoutTail });
+    if (stderrTail) options.onChunk?.({ type: 'stderr', data: stderrTail });
+    if (!Number.isInteger(exitCode)) throw new Error('Execution ended without a confirmed exit code');
     return { stdout, stderr, exitCode };
   }
 
@@ -309,13 +307,14 @@ export class CubeSandboxClient {
     const decoder = new TextDecoder();
     let stdout = '';
     let stderr = '';
-    let exitCode = 0;
+    let exitCode = null;
     let buffer = '';
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
 
+      if (Buffer.byteLength(stdout) + Buffer.byteLength(stderr) + Buffer.byteLength(buffer) + value.byteLength > 16 * 1024 * 1024) { await reader.cancel(); throw new Error('CubeSandbox output limit exceeded'); }
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split('\n');
       buffer = lines.pop() ?? '';
@@ -345,6 +344,7 @@ export class CubeSandboxClient {
       }
     }
 
+    if (!Number.isInteger(exitCode)) throw new Error('Execution ended without a confirmed exit code');
     return { stdout, stderr, exitCode };
   }
 
@@ -501,4 +501,18 @@ export class CubeSandboxClient {
     const query = `?command=${encodeURIComponent(command)}&cols=${cols}&rows=${rows}${this.apiKey ? `&token=${encodeURIComponent(this.apiKey)}` : ''}`;
     return `${wsEndpoint}/v1/sandboxes/${encodeURIComponent(sandboxId)}/pty${query}`;
   }
+}
+
+async function readBoundedResponse(response, maxBytes = 16 * 1024 * 1024) {
+  const reader = response.body.getReader(); const chunks = []; let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read(); if (done) break;
+      size += value.byteLength;
+      if (size > maxBytes) throw new Error('CubeSandbox response limit exceeded');
+      chunks.push(Buffer.from(value));
+    }
+    return Buffer.concat(chunks);
+  } catch (error) { await reader.cancel().catch(() => {}); throw error; }
+  finally { reader.releaseLock(); }
 }

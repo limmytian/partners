@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { mkdir } from 'node:fs/promises';
+
 import {
   createAgentExecutionGatewayServer,
   GatewayServiceAuthorizer,
@@ -9,8 +11,11 @@ import {
   LocalArtifactStore,
   LocalSandboxProvider,
   CubeSandboxProvider,
+  CubeSandboxClient,
   PostgresGatewayStore,
   S3ArtifactStore,
+  SandboxMcpService,
+  createMcpHandler,
   createGatewayMetrics,
   instrumentArtifactStore,
 } from '../src/index.js';
@@ -28,6 +33,7 @@ const metrics = createGatewayMetrics({
 const measuredArtifactStore = instrumentArtifactStore(artifactStore, metrics, {
   backend: artifactStoreKind,
 });
+await mkdir(workRoot, { recursive: true });
 let ready = false;
 const provider = buildProvider({ workRoot });
 await provider.reconcile?.();
@@ -39,24 +45,44 @@ const gateway = new InMemoryAgentExecutionGateway({
   metrics,
 });
 
+const authorizer = new GatewayServiceAuthorizer({
+  tokens: storeKind === 'postgres' ? [] : serviceTokens,
+  tokenStore: storeKind === 'postgres' ? store : null,
+});
+const mcpEnabled = process.env.GATEWAY_MCP_ENABLED === '1';
+if (mcpEnabled && storeKind !== 'postgres' && process.env.GATEWAY_MCP_ALLOW_LOCAL !== '1') {
+  throw new Error('MCP requires Postgres coordination; GATEWAY_MCP_ALLOW_LOCAL=1 is for development only');
+}
+if (mcpEnabled && (provider.name === 'local' || (provider.name === 'cubesandbox' && provider.mode !== 'remote')) && process.env.GATEWAY_MCP_ALLOW_LOCAL !== '1') {
+  throw new Error('MCP host execution/simulation requires explicit GATEWAY_MCP_ALLOW_LOCAL=1');
+}
+const mcpService = mcpEnabled ? new SandboxMcpService({ gateway, authorizer,
+  allowedProfiles: parseList(process.env.GATEWAY_MCP_ALLOWED_PROFILES),
+}) : null;
+await mcpService?.initialize();
 const app = createAgentExecutionGatewayServer({
   gateway,
-  logger: createJsonLogger(),
-  metrics,
-  readiness: async () => readinessStatus(),
-  authorizer: new GatewayServiceAuthorizer({
-    tokens: storeKind === 'postgres' ? [] : serviceTokens,
-    tokenStore: storeKind === 'postgres' ? store : null,
-  }),
+  logger: createJsonLogger(), metrics, readiness: async () => readinessStatus(), authorizer,
+  mcpHandler: mcpService ? createMcpHandler({ service: mcpService,
+    allowedOrigins: parseList(process.env.GATEWAY_MCP_ALLOWED_ORIGINS),
+  }) : null,
 });
+let sweeping = false;
+const mcpReaper = mcpService ? setInterval(async () => {
+  if (sweeping) return; sweeping = true;
+  try { await mcpService.sweep(); }
+  catch { log('error', 'MCP workspace sweep failed', { code: 'MCP_SWEEP_FAILED' }); }
+  finally { sweeping = false; }
+}, 5000) : null;
+mcpReaper?.unref();
 
 await new Promise((resolve) => app.listen(port, host, resolve));
 ready = true;
 
 log('info', 'gateway started', {
   host,
-  port,
-  authEnabled: Boolean(process.env.GATEWAY_SERVICE_TOKEN),
+  port: app.server.address().port,
+  authEnabled: authorizer.enabled,
   storeKind,
   artifactStoreKind,
   workRoot,
@@ -75,6 +101,8 @@ async function stop(signal) {
   ready = false;
   log('info', 'gateway stopping', { signal });
   try {
+    if (mcpReaper) clearInterval(mcpReaper);
+    await mcpService?.close();
     await app.close();
     await store.close?.();
     await measuredArtifactStore.close?.();
@@ -154,6 +182,7 @@ function buildProvider({ workRoot: rootDir }) {
       rootDir,
       endpoint: process.env.CUBESANDBOX_ENDPOINT,
       apiKey: process.env.CUBESANDBOX_API_KEY,
+      client: process.env.CUBESANDBOX_ENDPOINT ? new CubeSandboxClient({ endpoint: process.env.CUBESANDBOX_ENDPOINT, proxyEndpoint: process.env.CUBESANDBOX_PROXY_ENDPOINT, apiKey: process.env.CUBESANDBOX_API_KEY }) : undefined,
     });
   }
   if (requested !== 'local') {
@@ -175,6 +204,7 @@ async function readinessStatus() {
     storeHealth: storeHealth ?? undefined,
     artifactStore: artifactStoreKind,
     artifactStoreHealth: artifactHealth ?? undefined,
+    mcp: { enabled: mcpEnabled, protocolVersion: mcpEnabled ? '2025-11-25' : null, persistentCoordination: storeKind === 'postgres' },
     provider: provider.name,
     providerHealth: providerHealth ?? undefined,
   };

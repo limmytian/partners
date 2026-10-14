@@ -1,3 +1,4 @@
+import { workspaceFileCommand, parseWorkspaceResult, localWorkspaceFileOperation } from '../mcp/file-operation.js';
 import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { cp, mkdir, mkdtemp, rm } from 'node:fs/promises';
@@ -72,6 +73,7 @@ export class CubeSandboxProvider {
     this.sessions = new Map();
     this.snapshots = new Map();
     this.abortControllers = new Map();
+    this.activeJobSessions = new Map();
     this.sequence = 0;
     this.capabilities = new Set(PROVIDER_CAPABILITIES.cubesandbox);
     this.metrics = {
@@ -137,7 +139,8 @@ export class CubeSandboxProvider {
       this.metrics.totalColdStartDurationMs += coldStartMs;
 
       const session = {
-        id: remoteSandbox.id ?? id,
+        id,
+        providerSessionId: remoteSandbox.id ?? id,
         state: SessionState.Ready,
         executionMode: ExecutionMode.WorkspaceSession,
         provider: this.name,
@@ -204,6 +207,8 @@ export class CubeSandboxProvider {
     return { ...session };
   }
 
+  restoreSession(record) { this.sessions.set(record.id, { ...record }); }
+
   async getSession(sessionId) {
     let session = this.sessions.get(sessionId);
     if (!session && this.client && this.mode === 'remote') {
@@ -231,13 +236,13 @@ export class CubeSandboxProvider {
   }
 
   async deleteSession(sessionId) {
-    const session = this.sessions.get(sessionId);
+    const session = await this.getSession(sessionId);
     if (!session) {
       throw new Error(`Session not found: ${sessionId}`);
     }
 
     if (this.client && this.mode === 'remote') {
-      await this.client.deleteSandbox(sessionId).catch(() => {});
+      await this.client.deleteSandbox(session.providerSessionId ?? sessionId);
     } else if (session.workspacePath) {
       await rm(session.workspacePath, { recursive: true, force: true });
     }
@@ -359,6 +364,17 @@ export class CubeSandboxProvider {
 
   // --- Workspace File Browsing Delegations ---
 
+  async mcpFileOperation(sessionId, args) {
+    const session = await this.getSession(sessionId);
+    if (!session) throw Object.assign(new Error('Session not found'), { code: 'NOT_FOUND' });
+    if (this.client && this.mode === 'remote') {
+      const argv = workspaceFileCommand('/workspace', args);
+      const output = await this.client.exec(session.providerSessionId ?? sessionId, { argv, cwd: '/workspace', timeoutSeconds: 10 });
+      return parseWorkspaceResult(output.stdout, output.exitCode);
+    }
+    return localWorkspaceFileOperation(session.workspacePath, args);
+  }
+
   async listWorkspaceTree(sessionId, options = {}) {
     const session = this.sessions.get(sessionId);
     if (!session) {
@@ -469,6 +485,7 @@ export class CubeSandboxProvider {
     this.abortControllers.set(jobId, controller);
 
     let session = null;
+    let timeoutTimer;
     let ephemeralSession = null;
     const events = [];
     const emit = (type, payload = {}) => {
@@ -481,7 +498,7 @@ export class CubeSandboxProvider {
       emit('job.state', { state: JobState.Preparing });
 
       if (request.executionMode === ExecutionMode.WorkspaceSession) {
-        session = this.sessions.get(request.sessionId);
+        session = await this.getSession(request.sessionId);
         if (!session) {
           throw new Error(`Session not found: ${request.sessionId}`);
         }
@@ -492,6 +509,7 @@ export class CubeSandboxProvider {
         session = ephemeralSession;
       }
 
+      this.activeJobSessions.set(jobId, { session, reason: null });
       emit('microvm.ready', {
         provider: this.name,
         kernel: '6.6.30-cube-microvm',
@@ -507,6 +525,10 @@ export class CubeSandboxProvider {
 
       // Branch on remote vs in-memory execution
       if (this.client && this.mode === 'remote') {
+        if (request.metadata?.mcp) {
+          timeoutTimer = setTimeout(() => { void this.cancel(jobId, 'timeout').catch(() => controller.abort()); }, (request.timeoutSeconds ?? 120) * 1000);
+          timeoutTimer.unref();
+        }
         const execRequest = {
           command: request.command,
           code: request.code,
@@ -516,7 +538,7 @@ export class CubeSandboxProvider {
           timeoutSeconds: request.timeoutSeconds ?? 120,
         };
 
-        const execResult = await this.client.exec(session.id, execRequest, {
+        const execResult = await this.client.exec(session.providerSessionId ?? session.id, execRequest, {
           signal: controller.signal,
           onChunk: (chunk) => {
             if (chunk.type === 'stdout') {
@@ -535,6 +557,10 @@ export class CubeSandboxProvider {
             kind: ArtifactKind.Stdout,
             name: 'stdout.txt',
             content: execResult.stdout ?? '',
+          },
+          {
+            id: `art_${randomUUID()}`, jobId, kind: ArtifactKind.Stderr,
+            name: 'stderr.txt', content: execResult.stderr ?? '',
           },
         ];
 
@@ -609,7 +635,16 @@ export class CubeSandboxProvider {
         artifacts,
         completedAt: new Date().toISOString(),
       };
+    } catch (error) {
+      const context = this.activeJobSessions.get(jobId);
+      if (context?.fencePromise) await context.fencePromise;
+      if (!controller.signal.aborted || session?.state !== SessionState.Deleted) throw error;
+      const state = context?.reason === 'timeout' ? JobState.TimedOut : JobState.Cancelled;
+      emit('job.final', { state, exitCode: null, artifactCount: 0 });
+      return { id: jobId, state, executionMode: request.executionMode, sessionId: request.sessionId, provider: this.name, exitCode: null, stdout: '', stderr: '', artifacts: [], completedAt: new Date().toISOString() };
     } finally {
+      if (timeoutTimer) clearTimeout(timeoutTimer);
+      this.activeJobSessions.delete(jobId);
       this.abortControllers.delete(jobId);
       if (session && session.state !== SessionState.Deleted) {
         session.state = SessionState.Ready;
@@ -621,12 +656,25 @@ export class CubeSandboxProvider {
     }
   }
 
-  async cancel(jobId) {
+  async cancel(jobId, reason = 'cancelled') {
     const controller = this.abortControllers.get(jobId);
-    if (controller) {
-      controller.abort();
-      return true;
+    if (!controller) return false;
+    const context = this.activeJobSessions.get(jobId);
+    if (context && this.client && this.mode === 'remote') {
+      if (!context.fencePromise) {
+        context.reason = reason;
+        // Runtime shutdown can close exec before DELETE acknowledges success.
+        // Keep one shared fence promise so completion and concurrent cancellation
+        // classify the outcome only after confirmed destruction.
+        context.fencePromise = (async () => {
+          const session = await this.deleteSession(context.session.id);
+          context.session.state = SessionState.Deleted;
+          controller.abort();
+          return { session };
+        })();
+      }
+      return context.fencePromise;
     }
-    return false;
+    controller.abort(); return true;
   }
 }

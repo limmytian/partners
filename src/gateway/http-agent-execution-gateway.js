@@ -17,6 +17,7 @@ export function createAgentExecutionGatewayServer({
   logger = { error: (...args) => console.error(...args) },
   readiness = () => ({ status: 'ready' }),
   metrics = null,
+  mcpHandler = null,
 } = {}) {
   if (!gateway) {
     throw new TypeError('createAgentExecutionGatewayServer requires a gateway');
@@ -27,6 +28,10 @@ export function createAgentExecutionGatewayServer({
   const runningJobs = new Map();
 
   const server = http.createServer(async (req, res) => {
+    if (mcpHandler && new URL(req.url, 'http://localhost').pathname === '/mcp') {
+      try { return await mcpHandler(req, res); }
+      catch { if (!res.headersSent) sendJson(res, 500, { code: 'INTERNAL_ERROR' }); else res.end(); return; }
+    }
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, Idempotency-Key, Last-Event-ID');
@@ -229,6 +234,7 @@ async function routeRequest({ req, res, gateway, authorizer, eventBus, runningJo
       const existing = await gateway.getSession(sessionId);
       if (existing) {
         await authorize({ req, authorizer, scope: 'sessions:delete', resource: existing });
+        await assertRestMutationAllowed(gateway, sessionId);
       }
       const session = await gateway.deleteSession(sessionId);
       return sendJson(res, 202, sanitizeSession(session));
@@ -299,6 +305,7 @@ async function routeRequest({ req, res, gateway, authorizer, eventBus, runningJo
         return sendJson(res, 404, { error: 'Session not found' });
       }
       await authorize({ req, authorizer, scope: 'sessions:write', resource: session });
+      await assertRestMutationAllowed(gateway, sessionId);
 
       const contentType = (req.headers['content-type'] || '').toLowerCase();
       const allowSensitive = url.searchParams.get('allowSensitive') === 'true';
@@ -340,6 +347,7 @@ async function routeRequest({ req, res, gateway, authorizer, eventBus, runningJo
         return sendJson(res, 404, { error: 'Session not found' });
       }
       await authorize({ req, authorizer, scope: 'sessions:shell', resource: session });
+      await assertRestMutationAllowed(gateway, sessionId);
       const body = await readJson(req, { allowEmpty: true });
       const wsUrl = `ws://${req.headers.host || 'localhost'}/v1/sessions/${encodeURIComponent(sessionId)}/pty`;
       return sendJson(res, 200, {
@@ -403,6 +411,7 @@ async function routeRequest({ req, res, gateway, authorizer, eventBus, runningJo
   if (req.method === 'POST' && segments.length === 2 && segments[1] === 'jobs') {
     const request = await readJson(req);
     const auth = await authorize({ req, authorizer, scope: 'jobs:create', body: request });
+    if (request.sessionId) await assertRestMutationAllowed(gateway, request.sessionId);
     const idempotencyKey = singleHeader(req.headers['idempotency-key'], 'Idempotency-Key');
     const hasIdempotencyKey = idempotencyKey !== null;
     if (hasIdempotencyKey) {
@@ -751,6 +760,7 @@ async function handleUpgrade({ req, socket, head, gateway, authorizer, logger })
 
   // Authorize with sessions:shell scope
   await authorize({ req, authorizer, scope: 'sessions:shell', resource: session });
+      await assertRestMutationAllowed(gateway, sessionId);
 
   // Validate WebSocket Upgrade headers
   const upgradeHeader = (req.headers.upgrade || '').toLowerCase();
@@ -871,4 +881,9 @@ async function handleUpgrade({ req, socket, head, gateway, authorizer, logger })
     logger?.error?.('WebSocket stream error:', err);
     pty.kill('SIGKILL');
   });
+}
+
+async function assertRestMutationAllowed(gateway, sessionId) {
+  const session = await gateway.store.getSession(sessionId);
+  if (session?.metadata?.mcp) throw Object.assign(new Error('Use MCP tools to mutate MCP-managed workspaces'), { statusCode: 409 });
 }

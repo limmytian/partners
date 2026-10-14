@@ -139,3 +139,47 @@ test('CubeSandboxClient: snapshots, instant fork, and file operations', async ()
     await mockServer.close();
   }
 });
+
+test('CubeSandbox exec never retries a lost response or permission failure through another endpoint', async () => {
+  for (const failure of ['network', 'unauthorized']) {
+    let calls = 0;
+    const client = new CubeSandboxClient({ endpoint: 'http://cube.test', fetchImpl: async () => {
+      calls++;
+      if (failure === 'network') throw new Error('lost response');
+      return new Response('{}', { status: 403 });
+    } });
+    await assert.rejects(client.exec('sandbox', { argv: ['bash', '-lc', 'true'] }));
+    assert.equal(calls, 1);
+  }
+});
+
+test('envd byte frames preserve UTF-8 across independent stdout and stderr boundaries', async () => {
+  const stdout = Buffer.from('你好世界\n'), stderr = Buffer.from('错误消息\n');
+  const frame = event => { const body = Buffer.from(JSON.stringify({ event })); const header = Buffer.alloc(5); header.writeUInt32BE(body.length, 1); return Buffer.concat([header, body]); };
+  const body = Buffer.concat([
+    frame({ data: { stdout: stdout.subarray(0, 2).toString('base64'), stderr: stderr.subarray(0, 1).toString('base64') } }),
+    frame({ data: { stdout: stdout.subarray(2).toString('base64'), stderr: stderr.subarray(1).toString('base64') } }),
+    frame({ end: { exitCode: 7, exited: true } }),
+  ]);
+  let calls = 0; const chunks = [];
+  const client = new CubeSandboxClient({ endpoint: 'http://cube.test', fetchImpl: async () => ++calls === 1 ? new Response('{}', { status: 404 }) : new Response(body) });
+  const result = await client.exec('sandbox', { argv: ['true'] }, { onChunk: chunk => chunks.push(chunk) });
+  assert.equal(result.stdout, '你好世界\n'); assert.equal(result.stderr, '错误消息\n'); assert.equal(result.exitCode, 7);
+  assert.equal(chunks.filter(c => c.type === 'stdout').map(c => c.data).join(''), result.stdout);
+  assert.equal(chunks.filter(c => c.type === 'stderr').map(c => c.data).join(''), result.stderr);
+});
+
+test('envd streams output before completion and tolerates fragmented frame headers', async () => {
+  const frame = event => { const body = Buffer.from(JSON.stringify({ event })); const header = Buffer.alloc(5); header.writeUInt32BE(body.length, 1); return Buffer.concat([header, body]); };
+  let stream, signalChunk;
+  const received = new Promise(resolve => { signalChunk = resolve; });
+  const body = new ReadableStream({ start(controller) { stream = controller; } });
+  let calls = 0, finished = false;
+  const client = new CubeSandboxClient({ endpoint: 'http://cube.test', fetchImpl: async () => ++calls === 1 ? new Response('{}', { status: 404 }) : new Response(body) });
+  const pending = client.exec('sandbox', { argv: ['true'] }, { onChunk: signalChunk }).then(result => { finished = true; return result; });
+  const first = frame({ data: { stdout: Buffer.from('started\n').toString('base64') } });
+  stream.enqueue(first.subarray(0, 3)); stream.enqueue(first.subarray(3));
+  assert.deepEqual(await received, { type: 'stdout', data: 'started\n' }); assert.equal(finished, false);
+  stream.enqueue(frame({ end: { exitCode: 0, exited: true } })); stream.close();
+  assert.equal((await pending).stdout, 'started\n');
+});
