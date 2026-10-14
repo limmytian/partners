@@ -40,16 +40,8 @@ export class CubeSandboxClient {
       payload = JSON.stringify(body);
     }
 
-    let timeoutController;
-    let effectiveSignal = signal;
-    if (!signal && timeoutMs > 0) {
-      timeoutController = new AbortController();
-      const timer = setTimeout(() => timeoutController.abort(new Error(`Request timed out after ${timeoutMs}ms`)), timeoutMs);
-      effectiveSignal = timeoutController.signal;
-      if (typeof timer.unref === 'function') {
-        timer.unref();
-      }
-    }
+    const timeoutSignal = timeoutMs > 0 ? AbortSignal.timeout(timeoutMs) : null;
+    const effectiveSignal = signal && timeoutSignal ? AbortSignal.any([signal, timeoutSignal]) : signal ?? timeoutSignal;
 
     try {
       const response = await this.fetchImpl(url, {
@@ -137,6 +129,7 @@ export class CubeSandboxClient {
         signal: options.signal,
       });
     } catch (err) {
+      if (![404, 405].includes(err.status)) throw err;
       // Fall back to CubeAPI E2B-compatible route: POST /sandboxes with templateID
       const tpl = request.templateId ?? this.templateId;
       const res = await this.request('/sandboxes', {
@@ -212,25 +205,21 @@ export class CubeSandboxClient {
   // --- Command & Job Execution ---
 
   async exec(sandboxId, request = {}, options = {}) {
-    try {
-      // 1. Try standard mock server route /v1/sandboxes/:id/exec
-      const rawRes = await this.request(`/v1/sandboxes/${encodeURIComponent(sandboxId)}/exec`, {
-        method: 'POST',
-        body: request,
-        signal: options.signal,
-        rawResponse: true,
-      });
-
-      if (rawRes.ok) {
-        const contentType = rawRes.headers.get('content-type') ?? '';
-        if (contentType.includes('text/event-stream') || contentType.includes('application/x-ndjson')) {
-          return this._consumeStream(rawRes, options.onChunk);
-        }
-        return await rawRes.json();
+    // Fallback is permitted only when the endpoint is unsupported. A lost
+    // response or authorization failure must never execute the command twice.
+    const rawRes = await this.request(`/v1/sandboxes/${encodeURIComponent(sandboxId)}/exec`, {
+      method: 'POST', body: request, signal: options.signal, rawResponse: true,
+      timeoutMs: ((request.timeoutSeconds ?? 120) + 30) * 1000,
+    });
+    if (rawRes.ok) {
+      const contentType = rawRes.headers.get('content-type') ?? '';
+      if (contentType.includes('text/event-stream') || contentType.includes('application/x-ndjson')) {
+        return this._consumeStream(rawRes, options.onChunk);
       }
-    } catch (err) {
-      // ignore and try envd
+      return JSON.parse((await readBoundedResponse(rawRes)).toString('utf8'));
     }
+    if (![404, 405].includes(rawRes.status)) throw new Error(`CubeSandbox exec rejected: HTTP ${rawRes.status}`);
+    await rawRes.body?.cancel();
 
     // 2. Real MicroVM execution via CubeProxy / envd Connect protocol
     const argv = request.argv ?? (request.command?.argv) ?? (request.code ? ['node', '-e', request.code] : ['/bin/true']);
@@ -268,17 +257,18 @@ export class CubeSandboxClient {
       throw new Error(`CubeSandbox envd exec failed: HTTP ${res.status}`);
     }
 
-    const ab = await res.arrayBuffer();
-    const buf = Buffer.from(ab);
+    const buf = await readBoundedResponse(res);
 
     let stdout = '';
     let stderr = '';
-    let exitCode = 0;
+    let exitCode = null;
     let idx = 0;
 
     while (idx < buf.length) {
+      if (idx + 5 > buf.length) throw new Error('Malformed envd frame');
       const flag = buf.readUInt8(idx);
       const len = buf.readUInt32BE(idx + 1);
+      if (idx + 5 + len > buf.length) throw new Error('Malformed envd frame');
       const frameBuf = buf.subarray(idx + 5, idx + 5 + len);
       idx += 5 + len;
       try {
@@ -301,6 +291,7 @@ export class CubeSandboxClient {
       }
     }
 
+    if (!Number.isInteger(exitCode)) throw new Error('Execution ended without a confirmed exit code');
     return { stdout, stderr, exitCode };
   }
 
@@ -309,13 +300,14 @@ export class CubeSandboxClient {
     const decoder = new TextDecoder();
     let stdout = '';
     let stderr = '';
-    let exitCode = 0;
+    let exitCode = null;
     let buffer = '';
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
 
+      if (Buffer.byteLength(stdout) + Buffer.byteLength(stderr) + Buffer.byteLength(buffer) + value.byteLength > 16 * 1024 * 1024) { await reader.cancel(); throw new Error('CubeSandbox output limit exceeded'); }
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split('\n');
       buffer = lines.pop() ?? '';
@@ -345,6 +337,7 @@ export class CubeSandboxClient {
       }
     }
 
+    if (!Number.isInteger(exitCode)) throw new Error('Execution ended without a confirmed exit code');
     return { stdout, stderr, exitCode };
   }
 
@@ -501,4 +494,18 @@ export class CubeSandboxClient {
     const query = `?command=${encodeURIComponent(command)}&cols=${cols}&rows=${rows}${this.apiKey ? `&token=${encodeURIComponent(this.apiKey)}` : ''}`;
     return `${wsEndpoint}/v1/sandboxes/${encodeURIComponent(sandboxId)}/pty${query}`;
   }
+}
+
+async function readBoundedResponse(response, maxBytes = 16 * 1024 * 1024) {
+  const reader = response.body.getReader(); const chunks = []; let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read(); if (done) break;
+      size += value.byteLength;
+      if (size > maxBytes) throw new Error('CubeSandbox response limit exceeded');
+      chunks.push(Buffer.from(value));
+    }
+    return Buffer.concat(chunks);
+  } catch (error) { await reader.cancel().catch(() => {}); throw error; }
+  finally { reader.releaseLock(); }
 }

@@ -156,6 +156,7 @@ docker compose -f docker-compose.gateway-smoke.yml down -v
 
 ## Documentation Index
 
+- [Sandbox MCP Setup and Tool Guide](docs/sandbox-mcp.md)
 - [OpenAPI Specification](openapi/agent-execution-gateway.v1.yaml)
 - [Agent Execution Gateway API Guide](docs/gateway-api.md)
 - [Kubernetes Sandbox Provider Guide](docs/kubernetes-sandbox-provider.md)

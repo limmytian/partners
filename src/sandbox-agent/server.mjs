@@ -12,6 +12,7 @@ const workspaceRoot = path.resolve(process.env.SANDBOX_WORKSPACE ?? '/workspace'
 const authToken = process.env.SANDBOX_AGENT_TOKEN;
 const maxBodyBytes = parseInteger(process.env.SANDBOX_AGENT_MAX_BODY_BYTES, 16 * 1024 * 1024);
 let activeProcess = null;
+let activeCancellation = null;
 
 if (!authToken) {
   throw new Error('SANDBOX_AGENT_TOKEN is required');
@@ -53,7 +54,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/v1/cancel') {
       if (activeProcess) {
-        activeProcess.kill('SIGTERM');
+        activeCancellation?.();
         return sendJson(res, 200, { cancelled: true });
       }
       return sendJson(res, 200, { cancelled: false });
@@ -66,7 +67,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(port, host, () => {
-  console.log(JSON.stringify({ message: 'sandbox agent started', host, port, workspaceRoot }));
+  console.log(JSON.stringify({ message: 'sandbox agent started', host, port: server.address().port, workspaceRoot }));
 });
 
 function authorized(req) {
@@ -102,6 +103,7 @@ async function execute(request) {
     cwd,
     env,
     stdio: ['ignore', 'pipe', 'pipe'],
+    detached: process.platform !== 'win32',
   });
   activeProcess = child;
   let stdout = '';
@@ -115,13 +117,14 @@ async function execute(request) {
   child.stdout.on('data', (chunk) => { stdout = append(stdout, chunk); });
   child.stderr.on('data', (chunk) => { stderr = append(stderr, chunk); });
 
-  let timedOut = false;
+  let timedOut = false, cancelled = false;
   let killTimer = null;
-  const timeout = setTimeout(() => {
-    timedOut = true;
-    child.kill('SIGTERM');
-    killTimer = setTimeout(() => child.kill('SIGKILL'), 1000);
-  }, timeoutSeconds * 1000);
+  const kill = signal => {
+    try { if (process.platform !== 'win32') process.kill(-child.pid, signal); else child.kill(signal); } catch {}
+  };
+  const terminate = () => { kill('SIGTERM'); killTimer ??= setTimeout(() => kill('SIGKILL'), 1000); };
+  activeCancellation = () => { cancelled = true; terminate(); };
+  const timeout = setTimeout(() => { timedOut = true; terminate(); }, timeoutSeconds * 1000);
 
   try {
     const exitCode = await new Promise((resolve, reject) => {
@@ -134,12 +137,13 @@ async function execute(request) {
       stdout,
       stderr,
       timedOut,
-      cancelled: !timedOut && exitCode !== 0 && child.killed,
+      cancelled: !timedOut && cancelled,
     };
   } finally {
     clearTimeout(timeout);
     if (killTimer) clearTimeout(killTimer);
     activeProcess = null;
+    activeCancellation = null;
   }
 }
 

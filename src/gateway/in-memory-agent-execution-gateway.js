@@ -246,6 +246,11 @@ export class InMemoryAgentExecutionGateway {
     return this.provider.extractWorkspaceArchive(sessionId, archiveBuffer, options);
   }
 
+  async mcpFileOperation(sessionId, args) {
+    if (!this.provider.mcpFileOperation) throw Object.assign(new Error('Unsupported capability'), { code: 'UNSUPPORTED_CAPABILITY' });
+    return this.provider.mcpFileOperation(sessionId, args);
+  }
+
   async createSessionPty(sessionId, options = {}) {
     if (!this.provider.createPtySession) {
       throw Object.assign(new Error('Provider does not support interactive PTY sessions'), { statusCode: 501 });
@@ -255,6 +260,10 @@ export class InMemoryAgentExecutionGateway {
 
   async runJob(request, onEvent = () => {}) {
     assertExecutionJobRequest(request);
+    if (request.executionMode === 'workspace_session' && this.provider.restoreSession) {
+      const storedSession = await this.store.getSession(request.sessionId);
+      if (storedSession) this.provider.restoreSession(storedSession);
+    }
 
     const jobId = request.id ?? `job_${randomUUID()}`;
     const providerRequest = { ...request, id: jobId };
@@ -288,7 +297,19 @@ export class InMemoryAgentExecutionGateway {
     });
 
     let eventQueue = Promise.resolve();
+    let mcpLogBytes = 0;
     const emit = (event) => {
+      if (providerRequest.metadata?.mcp && ['log.stdout', 'log.stderr'].includes(event.type)) {
+        const buffer = Buffer.from(event.chunk ?? '');
+        const remaining = 16 * 1024 * 1024 - mcpLogBytes;
+        if (buffer.length > remaining) job.metadata.mcpOutputTruncated = true;
+        if (remaining <= 0) return Promise.resolve();
+        let end = Math.min(buffer.length, remaining);
+        while (end > 0 && end < buffer.length && (buffer[end] & 0xc0) === 0x80) end--;
+        const chunk = buffer.subarray(0, end).toString('utf8');
+        mcpLogBytes += Buffer.byteLength(chunk);
+        event = { ...event, chunk };
+      }
       eventQueue = eventQueue.then(async () => {
         const stored = await this.#storeEvent(jobId, event);
         await this.#applyEventToJob(job, stored);
@@ -301,6 +322,13 @@ export class InMemoryAgentExecutionGateway {
     await emit({ type: 'job.state', state: JobState.Queued, jobId });
 
     try {
+      const cancellation = await this.store.getCancellation(jobId);
+      if (cancellation) {
+        const result = { id: jobId, state: JobState.Cancelled, exitCode: null, stdout: '', stderr: '', artifacts: [], completedAt: this.#now() };
+        await emit({ type: 'job.final', state: JobState.Cancelled, exitCode: null, jobId });
+        await eventQueue; await this.#storeResult(job, result);
+        return result;
+      }
       const result = await this.provider.runJob(providerRequest, emit);
       await eventQueue;
       await this.#storeResult(job, result);
@@ -387,8 +415,8 @@ export class InMemoryAgentExecutionGateway {
     };
   }
 
-  async listJobEvents(jobId, { afterSequence = 0 } = {}) {
-    return this.store.listJobEvents(jobId, { afterSequence });
+  async listJobEvents(jobId, { afterSequence = 0, limit } = {}) {
+    return this.store.listJobEvents(jobId, { afterSequence, limit });
   }
 
   async listJobArtifacts(jobId) {
@@ -405,9 +433,7 @@ export class InMemoryAgentExecutionGateway {
 
   async cancel(jobId, reason = 'cancelled') {
     const job = await this.store.getJob(jobId);
-    if (!job) {
-      return null;
-    }
+    if (!job || ['succeeded','failed','timed_out','cancelled'].includes(job.state)) return job;
 
     await this.store.recordCancellation(jobId, {
       reason,
@@ -423,7 +449,11 @@ export class InMemoryAgentExecutionGateway {
     await this.#applyEventToJob(job, event);
 
     if (this.provider.cancel) {
-      await this.provider.cancel(jobId, reason);
+      const result = await this.provider.cancel(jobId, reason);
+      if (result?.session) {
+        const stored = await this.store.getSession(result.session.id);
+        await this.store.saveSession({ ...stored, ...result.session });
+      }
     }
 
     return this.store.getJob(jobId);
@@ -462,6 +492,7 @@ export class InMemoryAgentExecutionGateway {
   }
 
   async #applyEventToJob(job, event) {
+    if (job.metadata?.mcp && (await this.store.getJob(job.id))?.metadata?.mcpRecovery) return;
     if (event.type === 'job.state' && event.state) {
       job.state = event.state;
       job.updatedAt = event.at;
@@ -477,6 +508,8 @@ export class InMemoryAgentExecutionGateway {
   }
 
   async #storeResult(job, result) {
+    if (job.metadata?.mcp && (await this.store.getJob(job.id))?.metadata?.mcpRecovery) return;
+    if (result.outputTruncated) job.metadata = { ...job.metadata, mcpOutputTruncated: true };
     job.state = result.state;
     job.providerJobId = result.providerJobId ?? null;
     job.exitCode = result.exitCode ?? null;

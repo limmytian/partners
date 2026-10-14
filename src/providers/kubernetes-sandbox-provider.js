@@ -1,3 +1,4 @@
+import { workspaceFileCommand, parseWorkspaceResult } from '../mcp/file-operation.js';
 import { createHash, createHmac, randomUUID } from 'node:crypto';
 
 import {
@@ -98,6 +99,15 @@ export class KubernetesSandboxProvider {
       await this.#deleteSandbox(sandbox).catch(() => {});
       throw error;
     }
+  }
+
+  async mcpFileOperation(sessionId, args) {
+    const session = this.sessions.get(sessionId) ?? await this.#loadSession(sessionId);
+    if (!session) throw Object.assign(new Error('Session not found'), { code: 'NOT_FOUND' });
+    const result = await this.#agentRequest(session.sandbox, '/v1/exec', {
+      method: 'POST', body: { argv: workspaceFileCommand('/workspace', args), cwd: '/workspace', timeoutSeconds: 10 }, timeoutSeconds: 15,
+    });
+    return parseWorkspaceResult(result.stdout, result.exitCode);
   }
 
   async getSession(sessionId) {

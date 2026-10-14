@@ -18,12 +18,16 @@
     "gateway:smoke": "node scripts/gateway-smoke.mjs",
     "gateway:token": "node scripts/gateway-token.mjs",
     "console:service": "node console/server.mjs",
-    "test": "node --test"
+    "test": "node --test",
+    "mcp:smoke": "node scripts/mcp-smoke.mjs"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
-    "pg": "^8.22.0"
+    "@modelcontextprotocol/sdk": "1.31.0",
+    "pg": "^8.22.0",
+    "zod": "3.25.76",
+    "zod-to-json-schema": "3.25.2"
   }
 }

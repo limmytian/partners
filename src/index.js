@@ -26,3 +26,8 @@ export * from './providers/cubesandbox-provider.js';
 export * from './providers/cubesandbox-client.js';
 export * from './providers/kubernetes-api.js';
 export * from './providers/kubernetes-sandbox-provider.js';
+
+export * from './mcp/contract.js';
+export * from './mcp/coordination.js';
+export * from './mcp/service.js';
+export * from './mcp/http.js';

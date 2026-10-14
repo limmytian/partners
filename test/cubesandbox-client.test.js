@@ -139,3 +139,16 @@ test('CubeSandboxClient: snapshots, instant fork, and file operations', async ()
     await mockServer.close();
   }
 });
+
+test('CubeSandbox exec never retries a lost response or permission failure through another endpoint', async () => {
+  for (const failure of ['network', 'unauthorized']) {
+    let calls = 0;
+    const client = new CubeSandboxClient({ endpoint: 'http://cube.test', fetchImpl: async () => {
+      calls++;
+      if (failure === 'network') throw new Error('lost response');
+      return new Response('{}', { status: 403 });
+    } });
+    await assert.rejects(client.exec('sandbox', { argv: ['bash', '-lc', 'true'] }));
+    assert.equal(calls, 1);
+  }
+});
