@@ -2,7 +2,7 @@
 
 Implementation branch: `codex/sandbox-mcp`. Requirement: `0b1b70d7-4eb1-4a08-8b97-1a6c43206499`.
 
-Final full-suite result with a fresh configured PostgreSQL database: **144 tests, 143 passed, 0 failed, 1 MinIO environment test skipped**. The standalone `mcp:smoke` script also passed against the actual local service entrypoint.
+Final full-suite result with a fresh configured PostgreSQL database: **147 tests, 146 passed, 0 failed, 1 MinIO environment test skipped**. The standalone `mcp:smoke` script also passed against the actual local service entrypoint.
 
 ## Verified
 
@@ -27,10 +27,28 @@ POSTGRES_URL=<isolated-test-postgres-url> npm test
 
 The Postgres test URL must name a disposable test database, not production. The independently named MCP variable enables its multi-replica tests; POSTGRES_URL also enables the existing Gateway persistence test. MinIO validation remains conditional on its existing environment settings.
 
-## Pending real environment evidence
+## Live CubeSandbox acceptance — passed
 
-The current Kubernetes API can list CubeSandbox workloads, but the service health request returns `ServiceUnavailable: no endpoints available for service "cube-api"`. Both cube-api and cube-proxy port-forward attempts fail with a kubelet backend `502 Bad Gateway`. No sandbox was created and no cluster configuration was changed.
+Dell node `dell-r730` became Ready and cube-api/cube-proxy recovered. On 2026-10-14 09:06:46–09:07:48 UTC, the standard SDK drove the actual Gateway service entrypoint with PostgreSQL and real MicroVMs on Dell. Gateway ran locally through Kubernetes port forwards; this verifies the remote runtime integration, not a production Gateway rollout.
 
-Consequently live CubeSandbox create/exec/files/cancel/timeout/restart acceptance and production image/deployment verification are not complete. The release/acceptance task stays in review; the requirement is not marked done or ready to merge. After the service is healthy, run `npm run mcp:smoke` with a scoped test token, then validate remote cancellation, timeout and cross-process restart/fencing. Cube cancellation intentionally destroys its workspace, unlike Local; preserve needed files as durable artifacts beforehand.
+- Create/replay, sandbox-side conditional file writes/read/list, reconnect, request conflicts and sensitive-file/symlink boundaries passed.
+- Exactly 60,001 UTF-8 output bytes survived paginated reads. Nonzero exit and authenticated durable stdout/stderr artifact downloads passed.
+- Cancellation and one-second timeout confirmed actual VM destruction before reporting their respective terminal states.
+- Gateway restart preserved completed jobs, workspace contents and idempotent replay. SIGKILL during a running command, restart and actual lease expiry produced EXECUTION_UNKNOWN; further execution was blocked until explicit runtime fencing.
+- Actual 60-second idle TTL reclaimed the VM. All five VMs created by the run were removed; existing sandboxes were preserved.
+
+Live testing found and fixed incremental envd frame decoding (independent UTF-8 stdout/stderr decoders), missing stderr artifacts and the race between exec connection closure and deletion acknowledgment. Regression tests cover these failures.
+
+Evidence run: `46f9622b-7bea-41d5-9987-78ac453b85cf`; guest kernel `6.6.1199-0009-03_2.0.1`, working directory `/workspace`. Template `tpl-24b408a967a14772b6acf309`, image SHA-256 `467494c38f3c335e42d590e23d5cbb00dc15c2627c9da4f7e7f3bd9f4ec18c5e`.
+
+Machine-readable evidence is retained in [the committed run record](sandbox-mcp-live-evidence.json). The reusable harness generates its own evidence and artifacts directory, uses a unique test tenant, and cleans up only its own VMs:
+
+```sh
+CUBESANDBOX_ENDPOINT=<reachable-api-url> \
+CUBESANDBOX_PROXY_ENDPOINT=<reachable-proxy-url> \
+MCP_TEST_POSTGRES_URL=<isolated-test-postgres-url> npm run mcp:validate-live
+```
+
+Production image build/rollout was not performed. The six implementation/acceptance tasks are complete; the requirement remains in review for code review. Cube cancellation intentionally destroys its workspace; preserve needed files as durable artifacts beforehand.
 
 Remaining operational boundaries are documented in [the setup guide](sandbox-mcp.md): trusted Local development, Python/runtime prerequisites, capped log capture, and fail-closed operator reconciliation of uncertain provisioning/write operations. No external agent product is a delivery prerequisite.

@@ -1,3 +1,5 @@
+import { StringDecoder } from 'node:string_decoder';
+
 /**
  * CubeSandboxClient: Lightweight HTTP REST client for communicating with the
  * CubeSandbox MicroVM daemon service.
@@ -216,7 +218,10 @@ export class CubeSandboxClient {
       if (contentType.includes('text/event-stream') || contentType.includes('application/x-ndjson')) {
         return this._consumeStream(rawRes, options.onChunk);
       }
-      return JSON.parse((await readBoundedResponse(rawRes)).toString('utf8'));
+      const result = JSON.parse((await readBoundedResponse(rawRes)).toString('utf8'));
+      if (result.stdout) options.onChunk?.({ type: 'stdout', data: result.stdout });
+      if (result.stderr) options.onChunk?.({ type: 'stderr', data: result.stderr });
+      return result;
     }
     if (![404, 405].includes(rawRes.status)) throw new Error(`CubeSandbox exec rejected: HTTP ${rawRes.status}`);
     await rawRes.body?.cancel();
@@ -257,40 +262,42 @@ export class CubeSandboxClient {
       throw new Error(`CubeSandbox envd exec failed: HTTP ${res.status}`);
     }
 
-    const buf = await readBoundedResponse(res);
-
-    let stdout = '';
-    let stderr = '';
-    let exitCode = null;
-    let idx = 0;
-
-    while (idx < buf.length) {
-      if (idx + 5 > buf.length) throw new Error('Malformed envd frame');
-      const flag = buf.readUInt8(idx);
-      const len = buf.readUInt32BE(idx + 1);
-      if (idx + 5 + len > buf.length) throw new Error('Malformed envd frame');
-      const frameBuf = buf.subarray(idx + 5, idx + 5 + len);
-      idx += 5 + len;
-      try {
-        const json = JSON.parse(frameBuf.toString('utf-8'));
-        if (json?.event?.data?.stdout) {
-          const text = Buffer.from(json.event.data.stdout, 'base64').toString('utf-8');
-          stdout += text;
-          if (options.onChunk) options.onChunk({ type: 'stdout', data: text });
+    let stdout = '', stderr = '', exitCode = null;
+    const stdoutDecoder = new StringDecoder('utf8'), stderrDecoder = new StringDecoder('utf8');
+    const reader = res.body.getReader(); let buffered = Buffer.alloc(0), received = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) { if (buffered.length) throw new Error('Malformed envd frame'); break; }
+        received += value.byteLength;
+        if (received > 16 * 1024 * 1024) throw new Error('CubeSandbox response limit exceeded');
+        buffered = Buffer.concat([buffered, Buffer.from(value)]);
+        while (buffered.length >= 5) {
+          const flag = buffered[0], length = buffered.readUInt32BE(1);
+          if (length > 16 * 1024 * 1024 || (flag & 1)) throw new Error('Unsupported envd frame');
+          if (buffered.length < 5 + length) break;
+          const frame = buffered.subarray(5, 5 + length); buffered = buffered.subarray(5 + length);
+          const message = JSON.parse(frame.toString('utf8'));
+          if (message.error) throw new Error('envd execution stream failed');
+          const event = message.event;
+          if (event?.data?.stdout) {
+            const text = stdoutDecoder.write(Buffer.from(event.data.stdout, 'base64'));
+            stdout += text; if (text) options.onChunk?.({ type: 'stdout', data: text });
+          }
+          if (event?.data?.stderr) {
+            const text = stderrDecoder.write(Buffer.from(event.data.stderr, 'base64'));
+            stderr += text; if (text) options.onChunk?.({ type: 'stderr', data: text });
+          }
+          if (event?.end) exitCode = event.end.exitCode ?? (event.end.exited ? 0 : 1);
         }
-        if (json?.event?.data?.stderr) {
-          const text = Buffer.from(json.event.data.stderr, 'base64').toString('utf-8');
-          stderr += text;
-          if (options.onChunk) options.onChunk({ type: 'stderr', data: text });
-        }
-        if (json?.event?.end) {
-          exitCode = json.event.end.exitCode ?? (json.event.end.exited ? 0 : 1);
-        }
-      } catch {
-        // ignore frame parse errors
       }
-    }
+    } catch (error) { await reader.cancel().catch(() => {}); throw error; }
+    finally { reader.releaseLock(); }
 
+    const stdoutTail = stdoutDecoder.end(), stderrTail = stderrDecoder.end();
+    stdout += stdoutTail; stderr += stderrTail;
+    if (stdoutTail) options.onChunk?.({ type: 'stdout', data: stdoutTail });
+    if (stderrTail) options.onChunk?.({ type: 'stderr', data: stderrTail });
     if (!Number.isInteger(exitCode)) throw new Error('Execution ended without a confirmed exit code');
     return { stdout, stderr, exitCode };
   }

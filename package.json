@@ -19,7 +19,8 @@
     "gateway:token": "node scripts/gateway-token.mjs",
     "console:service": "node console/server.mjs",
     "test": "node --test",
-    "mcp:smoke": "node scripts/mcp-smoke.mjs"
+    "mcp:smoke": "node scripts/mcp-smoke.mjs",
+    "mcp:validate-live": "node scripts/mcp-live-validation.mjs"
   },
   "engines": {
     "node": ">=20"

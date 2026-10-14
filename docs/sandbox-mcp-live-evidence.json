@@ -1,0 +1,84 @@
+{
+  "run": "46f9622b-7bea-41d5-9987-78ac453b85cf",
+  "protocol": "2025-11-25",
+  "startedAt": "2026-10-14T09:06:46.953Z",
+  "cases": [
+    {
+      "name": "created:idle",
+      "status": "passed",
+      "sessionId": "ses_5e05b905-7f86-4499-abae-98346391cd0e",
+      "remoteId": "838d6e07876247309d452c8e08859da5",
+      "node": "dell-r730"
+    },
+    {
+      "name": "created:happy",
+      "status": "passed",
+      "sessionId": "ses_bed9b45e-8a1b-4979-92b6-ece757b870fc",
+      "remoteId": "486d8c01047740a294666c91bb87bef7",
+      "node": "dell-r730"
+    },
+    {
+      "name": "file-exec-reconnect-idempotency",
+      "status": "passed",
+      "kernelOutput": "6.6.1199-0009-03_2.0.1\n/workspace\nlive-mcp-\u4f60\u597d"
+    },
+    {
+      "name": "sandbox-file-boundaries-and-conditional-write",
+      "status": "passed"
+    },
+    {
+      "name": "unicode-output-pagination",
+      "status": "passed",
+      "bytes": 60001
+    },
+    {
+      "name": "nonzero-exit-and-durable-artifacts",
+      "status": "passed"
+    },
+    {
+      "name": "created:cancel",
+      "status": "passed",
+      "sessionId": "ses_f043b966-0d24-4b3f-a791-e5fcfe9b70b1",
+      "remoteId": "2b2fe45d9d4c4871b07e5730dcb757e2",
+      "node": "dell-r730"
+    },
+    {
+      "name": "cancel-confirmed-runtime-fence",
+      "status": "passed"
+    },
+    {
+      "name": "created:timeout",
+      "status": "passed",
+      "sessionId": "ses_faf06b66-23c0-4fa4-bf4e-48a23e183714",
+      "remoteId": "6aafd1bfe0684bc2bb7eb24dc31788fe",
+      "node": "dell-r730"
+    },
+    {
+      "name": "timeout-confirmed-runtime-fence",
+      "status": "passed"
+    },
+    {
+      "name": "completed-job-and-workspace-survive-gateway-restart",
+      "status": "passed"
+    },
+    {
+      "name": "created:crash",
+      "status": "passed",
+      "sessionId": "ses_06515d26-ce35-4a09-aa9d-f8b31675eb0e",
+      "remoteId": "c25b0fbefc734bd6855e956c5315d199",
+      "node": "dell-r730"
+    },
+    {
+      "name": "killed-worker-unknown-execution-and-fence",
+      "status": "passed"
+    },
+    {
+      "name": "real-idle-ttl-reclamation",
+      "status": "passed"
+    }
+  ],
+  "kernelOutput": "6.6.1199-0009-03_2.0.1\n/workspace\nlive-mcp-\u4f60\u597d",
+  "status": "passed",
+  "remainingOwnSandboxes": 0,
+  "completedAt": "2026-10-14T09:07:48.804Z"
+}

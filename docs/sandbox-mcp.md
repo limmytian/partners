@@ -74,3 +74,7 @@ MCP_TENANT_ID=<tenant-id> MCP_PROJECT_ID=<project-id> \
 Supply `MCP_TOKEN` through the environment/secret manager. The smoke script discovers tools, creates its own workspace, writes a Python file, executes it, polls output, reads/lists files and deletes the workspace. It never modifies an existing workspace.
 
 Rollback: stop new clients, cancel/drain owned jobs and delete test/workspace sessions through MCP; then set `GATEWAY_MCP_ENABLED=0` and restart/redeploy the gateway. Schema additions are additive; do not drop recovery records or existing Gateway tables. Existing REST-created workspaces and APIs remain compatible. Rollout/remote sandbox acceptance must be validated in your environment before production use.
+
+## Real runtime validation
+
+`npm run mcp:validate-live` exercises the actual Gateway entrypoint against remote CubeSandbox and an isolated PostgreSQL test database. Set `CUBESANDBOX_ENDPOINT`, `CUBESANDBOX_PROXY_ENDPOINT`, and `MCP_TEST_POSTGRES_URL`; optionally supply `CUBESANDBOX_API_KEY`. It creates real VMs, kills/restarts its Gateway process, waits for actual lease/TTL expiry, and deletes only its own VMs. It writes JSON evidence and durable artifacts to a temporary directory. See [validation results](sandbox-mcp-validation.md). Remote stdout/stderr stream incrementally with UTF-8 boundaries preserved and are retained as separate artifacts.

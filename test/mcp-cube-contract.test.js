@@ -41,3 +41,23 @@ test('remote file adapter uses fixed isolated Python inside sandbox and forwards
   provider.restoreSession({ id: 'logical-id', providerSessionId: 'remote-id' });
   await assert.rejects(provider.mcpFileOperation('logical-id', { action: 'read', path: '.env' }), { code: 'FORBIDDEN' });
 });
+
+test('remote timeout waits for deletion acknowledgment after exec connection closes', { timeout: 5000 }, async t => {
+  let rejectExec, deleted = 0;
+  const client = {
+    async createSandbox() { return { id: 'remote-timeout-race' }; },
+    async exec() { return new Promise((_, reject) => { rejectExec = reject; }); },
+    async deleteSandbox() {
+      deleted++; rejectExec(new Error('runtime shut down before DELETE acknowledgment'));
+      await new Promise(r => setTimeout(r, 50));
+    },
+  };
+  const provider = new CubeSandboxProvider({ client, mode: 'remote' });
+  const f = await fixture(t, { gateway: { provider } });
+  const session = await f.service.call('session_create', { tenantId: 't', projectId: 'p', requestId: 'create-race' }, headers);
+  const accepted = await f.service.call('bash_exec', { sessionId: session.sessionId, command: 'sleep 20', requestId: 'exec-race', timeoutSeconds: 1 }, headers);
+  await f.service.running.get(accepted.jobId);
+  assert.equal((await f.gateway.getJob(accepted.jobId)).state, 'timed_out');
+  assert.equal((await f.gateway.store.getSession(session.sessionId)).state, 'deleted');
+  assert.equal(deleted, 1);
+});

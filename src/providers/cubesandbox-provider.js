@@ -558,6 +558,10 @@ export class CubeSandboxProvider {
             name: 'stdout.txt',
             content: execResult.stdout ?? '',
           },
+          {
+            id: `art_${randomUUID()}`, jobId, kind: ArtifactKind.Stderr,
+            name: 'stderr.txt', content: execResult.stderr ?? '',
+          },
         ];
 
         emit('job.final', { state, exitCode: execResult.exitCode ?? 0 });
@@ -633,6 +637,7 @@ export class CubeSandboxProvider {
       };
     } catch (error) {
       const context = this.activeJobSessions.get(jobId);
+      if (context?.fencePromise) await context.fencePromise;
       if (!controller.signal.aborted || session?.state !== SessionState.Deleted) throw error;
       const state = context?.reason === 'timeout' ? JobState.TimedOut : JobState.Cancelled;
       emit('job.final', { state, exitCode: null, artifactCount: 0 });
@@ -656,13 +661,19 @@ export class CubeSandboxProvider {
     if (!controller) return false;
     const context = this.activeJobSessions.get(jobId);
     if (context && this.client && this.mode === 'remote') {
-      context.reason = reason;
-      // Abort alone only closes an HTTP connection. Destroying the one-writer
-      // runtime is the confirmed fence until a provider process-kill API exists.
-      const session = await this.deleteSession(context.session.id);
-      context.session.state = SessionState.Deleted;
-      controller.abort();
-      return { session };
+      if (!context.fencePromise) {
+        context.reason = reason;
+        // Runtime shutdown can close exec before DELETE acknowledges success.
+        // Keep one shared fence promise so completion and concurrent cancellation
+        // classify the outcome only after confirmed destruction.
+        context.fencePromise = (async () => {
+          const session = await this.deleteSession(context.session.id);
+          context.session.state = SessionState.Deleted;
+          controller.abort();
+          return { session };
+        })();
+      }
+      return context.fencePromise;
     }
     controller.abort(); return true;
   }

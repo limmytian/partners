@@ -97,6 +97,8 @@ D. 端到端交付：Local 自动化 + 真实 CubeSandbox 环境，文档与客�
 
 ## 实施记录（2026-10-14）
 
-已在 codex/sandbox-mcp 完成五项实现任务与七项工具。固定官方 SDK 1.31.0、2025-11-25；新增部署开关、测试与 smoke 脚本。全量测试 144 项：143 通过、1 项 MinIO 条件测试跳过；真实 PostgreSQL 两个 Gateway 实例仅启动一个作业；实际本地服务 smoke 通过。用户已明确：仅交付 Partners MCP，不依赖外部 Agent 产品接入。
+已在 codex/sandbox-mcp 完成六项实现与验收任务、七项工具。固定官方 SDK 1.31.0、2025-11-25；新增部署开关、回归、smoke 与真实环境验收脚本。全量测试 147 项：146 通过、0 失败、1 项 MinIO 条件测试跳过。用户已明确：仅交付 Partners MCP，不依赖外部 Agent 产品接入。
 
-CubeSandbox 取消/超时以销毁工作区确认停止；目录枚举、日志捕获和不确定操作保留的边界详见 docs/sandbox-mcp.md。当前 cube-api 无可用端点、端口转发 kubelet 返回 502；真实远程验收仍在 in_review，不宣称生产验证通过。详见 docs/sandbox-mcp-validation.md。
+Dell 节点启动后，真实 CubeSandbox 验收全部通过：文件与执行、UTF-8 分页、持久日志、取消/超时销毁、Gateway 重启、SIGKILL 后未知执行隔离及空闲 TTL 回收。修复实测暴露的 envd UTF-8 分帧、stderr artifact 和超时确认竞争；本次创建的沙箱均已清理。原服务端点与 kubelet 502 阻塞已解除。
+
+CubeSandbox 取消/超时以销毁工作区确认停止；边界详见 docs/sandbox-mcp.md。真实环境记录及版本见 docs/sandbox-mcp-validation.md，需求保留 in_review 等待代码审查。生产 Gateway 镜像构建和部署未执行。
