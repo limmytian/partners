@@ -434,7 +434,9 @@ async function routeRequest({ req, res, gateway, authorizer, eventBus, runningJo
       reservation = await gateway.reserveJobSubmission({ idempotencyKey, request });
       if (!reservation.acquired) {
         const known = await gateway.getJob(reservation.record.resourceId);
-        if (known && ((known.tenantId ?? null) !== (request.tenantId ?? null)
+        const owner = reservation.record.owner;
+        if (known && ((owner && known.submissionOwner !== owner)
+          || (known.tenantId ?? null) !== (request.tenantId ?? null)
           || (known.projectId ?? null) !== (request.projectId ?? null))) {
           return sendJson(res, 409, { error: 'Job ID is already in use' });
         }
@@ -450,7 +452,11 @@ async function routeRequest({ req, res, gateway, authorizer, eventBus, runningJo
       accepted(event.jobId);
       eventBus.emit(event.jobId, event);
     };
-    const completion = gateway.createJob(withAuthContext({ ...request, ...(jobId ? { id: jobId } : {}) }, auth), publish)
+    const completion = gateway.createJob(
+      withAuthContext({ ...request, ...(jobId ? { id: jobId } : {}) }, auth),
+      publish,
+      { submissionOwner: reservation?.record.owner },
+    )
       .finally(() => runningJobs.delete(jobId));
     completion.catch(() => {});
     jobId = await Promise.race([acceptance, completion.then(result => result?.id)]);
@@ -720,7 +726,8 @@ function sanitizeJob(job) {
   if (!job) {
     return null;
   }
-  return { ...job };
+  const { submissionOwner, ...publicJob } = job;
+  return publicJob;
 }
 
 function sanitizeArtifact(artifact) {

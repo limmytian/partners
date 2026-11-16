@@ -281,7 +281,7 @@ export class InMemoryAgentExecutionGateway {
     return this.provider.createPtySession(sessionId, options);
   }
 
-  async runJob(request, onEvent = () => {}, { insertOnly = false } = {}) {
+  async runJob(request, onEvent = () => {}, { insertOnly = false, submissionOwner = null } = {}) {
     assertExecutionJobRequest(request);
     if (request.executionMode === 'workspace_session' && this.provider.restoreSession) {
       const storedSession = await this.store.getSession(request.sessionId);
@@ -293,6 +293,7 @@ export class InMemoryAgentExecutionGateway {
     const now = this.#now();
     const job = {
       id: jobId,
+      ...(submissionOwner ? { submissionOwner } : {}),
       state: JobState.Queued,
       executionMode: providerRequest.executionMode,
       tenantId: providerRequest.tenantId ?? null,
@@ -375,8 +376,8 @@ export class InMemoryAgentExecutionGateway {
     }
   }
 
-  async createJob(request, onEvent = () => {}) {
-    return this.runJob(request, onEvent, { insertOnly: true });
+  async createJob(request, onEvent = () => {}, { submissionOwner = null } = {}) {
+    return this.runJob(request, onEvent, { insertOnly: true, submissionOwner });
   }
 
   async #getCoordinator() {

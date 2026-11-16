@@ -37,6 +37,11 @@ test('REST: two HTTP replicas with independent Postgres connections reserve one 
   await new Promise(r => restarted.listen(0, '127.0.0.1', r));
   t.after(async () => { await restarted.close(); await third.close(); });
   assert.deepEqual(await submit(restarted), results[0]); assert.equal(calls, 1);
+  const collision = { ...request, id: results[0].body.id };
+  const collisionKey = 'collision-' + randomUUID();
+  assert.equal((await submit(apps[1], collision, collisionKey)).status, 409);
+  assert.equal((await submit(restarted, collision, collisionKey)).status, 409);
+  assert.equal(calls, 1);
   // Simulate process death immediately after durable intent, before any job row.
   const crashKey = 'crash-' + randomUUID();
   const intent = await gateways[0].reserveJobSubmission({ idempotencyKey: crashKey, request });
@@ -46,7 +51,7 @@ test('REST: two HTTP replicas with independent Postgres connections reserve one 
   // Simulate provider acceptance followed by loss of the submitting process/response.
   const lostKey = 'lost-' + randomUUID();
   const lost = await gateways[0].reserveJobSubmission({ idempotencyKey: lostKey, request });
-  await gateways[0].createJob({ ...request, id: lost.record.resourceId });
+  await gateways[0].createJob({ ...request, id: lost.record.resourceId }, undefined, { submissionOwner: lost.record.owner });
   assert.equal((await submit(restarted, request, lostKey)).body.id, lost.record.resourceId);
   assert.equal(calls, 2);
   // Scope filtering is executed in SQL before LIMIT/OFFSET and survives restart.
