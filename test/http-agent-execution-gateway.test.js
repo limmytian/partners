@@ -653,9 +653,9 @@ function createCountingProvider() {
 }
 
 class SlowSaveJobStore extends InMemoryGatewayStore {
-  async saveJob(job) {
+  async saveJob(job, options) {
     await new Promise((resolve) => setTimeout(resolve, 10));
-    return super.saveJob(job);
+    return super.saveJob(job, options);
   }
 }
 

@@ -1,5 +1,7 @@
 # Partners v0.1.5 迭代计划
 
+> 执行更新（2026-11-16）：用户已明确授权实施，需求已进入 in_progress；原有规划描述保留为历史基线。实际修复、部署与验收状态见 [实施记录](iteration-v0.1.5-execution.md)，后文的 draft/todo 描述不再代表当前状态。
+
 规划日期：2026-11-16（Asia/Shanghai）。基线：本地 main / de02905，package 0.1.4。
 
 目标：修复已复现的租户隔离和 REST 并发幂等问题，建立持续集成中的持久化验证，将现有 Kubernetes CubeSandbox 从 v0.7.2 升级到正式 v0.8.0，并完成标准 MCP Agent 对升级后实例的多轮工作区验收。维持现有 REST/MCP 公共接口；这是一次可靠性补丁与运行时升级迭代。

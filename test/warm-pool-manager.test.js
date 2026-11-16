@@ -56,7 +56,7 @@ test('WarmPoolManager: prewarms instances and provides sub-50ms instant session 
 
 test('WarmPoolManager: integrated into InMemoryAgentExecutionGateway for ultra-fast creation', async () => {
   const rootDir = await mkdtemp(path.join(tmpdir(), 'partners-warm-gw-'));
-  const provider = new CubeSandboxProvider({ rootDir });
+  const provider = new CubeSandboxProvider({ rootDir, mode: 'in_memory' });
   const warmPool = new WarmPoolManager({
     provider,
     poolSize: 2,

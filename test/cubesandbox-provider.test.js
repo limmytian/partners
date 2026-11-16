@@ -11,7 +11,7 @@ import {
 } from '../src/index.js';
 
 test('CubeSandboxProvider: sub-60ms session cold start and hardware virtualization', async () => {
-  const provider = new CubeSandboxProvider();
+  const provider = new CubeSandboxProvider({ mode: 'in_memory' });
 
   // Create session
   const startTime = performance.now();
@@ -39,7 +39,7 @@ test('CubeSandboxProvider: sub-60ms session cold start and hardware virtualizati
 });
 
 test('CubeSandboxProvider: CubeCoW millisecond-level snapshot and instant fork', async () => {
-  const provider = new CubeSandboxProvider();
+  const provider = new CubeSandboxProvider({ mode: 'in_memory' });
   const session = await provider.createSession();
 
   // Write file in parent session
@@ -73,7 +73,7 @@ test('CubeSandboxProvider: CubeCoW millisecond-level snapshot and instant fork',
 });
 
 test('CubeSandboxProvider: runs job in microvm session', async () => {
-  const provider = new CubeSandboxProvider();
+  const provider = new CubeSandboxProvider({ mode: 'in_memory' });
   const session = await provider.createSession();
 
   const events = [];

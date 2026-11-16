@@ -1,5 +1,7 @@
 # 现有 Kubernetes CubeSandbox v0.7.2 → v0.8.0 升级方案
 
+> 执行更新：已实际升级到正式 v0.8.0，Helm revision 6。以下方案及只读基线保留；实际记录、digest、回归与回退入口见 [实施记录](iteration-v0.1.5-execution.md) 和 [部署证据](evidence/v0.1.5/deployment.json)。
+
 日期：2026-11-16（Asia/Shanghai）。状态：已纳入 Partners v0.1.5；本次仅完成只读盘点，未执行升级。
 
 ## 授权与交付范围

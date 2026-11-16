@@ -1,0 +1,59 @@
+{
+  "mysql.sql": {
+    "bytes": 4315250,
+    "sha256": "9c8058ba09b35539ba77cccfc4968a888f0d82fd5586a59b4f948d19dfd13ab5"
+  },
+  "node-versions.txt": {
+    "bytes": 789,
+    "sha256": "d0220f49fa91329620b0ee35f1e339ff5c34f0ec379497ca1751b37f45e74cfe"
+  },
+  "values-all.yaml": {
+    "bytes": 19305,
+    "sha256": "88117dd9476bd357343ea866678b881578c6db22e5ba40b4b2913bbad470b5be"
+  },
+  "master-storage.tar.gz": {
+    "bytes": 219709271,
+    "sha256": "720a1dc24a25eeb78aae99d970c42b2f0400c905c813fd0178c6824569ff7763",
+    "archiveMembers": 7
+  },
+  "partners-resources.json": {
+    "bytes": 256951,
+    "sha256": "c2d10f33d6fcf38d1d79fa28b382c5ee68ff6807b5c6b751f888ef73f4980f23"
+  },
+  "redis.tar.gz": {
+    "bytes": 7818,
+    "sha256": "6de5301715ec18a71a3fea093e20c30f3e5b414a9755a6a771c48af1eb22cb0f",
+    "archiveMembers": 2
+  },
+  "resources.json": {
+    "bytes": 1262218,
+    "sha256": "d8072976b84ccd2cace3bd3f2bc7fcb729246b7ee47f22afbabee853789e8322"
+  },
+  "manifest.yaml": {
+    "bytes": 124995,
+    "sha256": "1592cd86dc9b1332424234d65a13fad05a4a2c41edcb6b55fbc272899f2c6de8"
+  },
+  "node-runtime.tar.gz": {
+    "bytes": 591751496,
+    "sha256": "a56f2d890c269c10672224a0b7848fa12be043a9cf0816ea9c98290a649928fe",
+    "archiveMembers": 389,
+    "preservedSandboxPaths": {
+      "e0ee5886c82c494489c41be02a47d86d": 1,
+      "73dbcaf2d3f14857a1efc1681ba507a3": 1
+    },
+    "restoredVersionFiles": 10
+  },
+  "values.yaml": {
+    "bytes": 1865,
+    "sha256": "1e7e8ae72d01adf1793db82bcacf6ef6127b8604b439185a603084531c37ba2d"
+  },
+  "minio.tar.gz": {
+    "bytes": 9694,
+    "sha256": "120c73bf469b56bea404ce3b6ba316503c84748d7382a28c9011f5b582321c78",
+    "archiveMembers": 80
+  },
+  "nodes.json": {
+    "bytes": 39843,
+    "sha256": "1d07cf49b872025493b6323b04bdf171d8f1d6ff9a97a048f835269b922b5636"
+  }
+}

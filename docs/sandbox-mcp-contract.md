@@ -2,7 +2,7 @@
 
 Partners owns this contract. Pia integration is explicitly excluded per the user's scope correction; no external consumer is a delivery gate.
 
-Protocol: **2025-11-25**, official SDK **1.31.0**, stateless Streamable HTTP `/mcp`, JSON responses. No MCP transport session IDs. Workspace session IDs are durable Gateway resources. GET and DELETE on the transport return 405; they do not delete workspaces. Unsupported protocol versions are rejected rather than silently negotiated. The seven tool input schemas and limits are executable in `src/mcp/contract.js`.
+Protocol: **2025-11-25**, official SDK **1.31.0**, stateless Streamable HTTP `/mcp`, JSON responses. No MCP transport session IDs. Workspace session IDs are durable Gateway resources. GET and DELETE on the transport return 405; they do not delete workspaces. Initialize uses official SDK version negotiation: supported older versions are accepted, and an unknown offered version receives the server's supported fallback. Subsequent requests with an unsupported MCP-Protocol-Version header receive HTTP 400. Missing headers use the SDK's HTTP default. The seven tool input schemas and limits are executable in `src/mcp/contract.js`.
 
 Compatibility evidence: local TW `packages/core/src/services/mcp-pool.ts` uses the SDK Client and StreamableHTTPClientTransport with configured auth headers; TW pnpm lock resolves its direct SDK dependency to 1.31.0. Contract tests negotiate and discover all seven tools with this same SDK. HTTP handshake/flow verification is part of the transport implementation test, not yet implied by this contract test. No Pia compatibility claim.
 

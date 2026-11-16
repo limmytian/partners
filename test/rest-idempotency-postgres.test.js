@@ -53,6 +53,9 @@ test('REST: two HTTP replicas with independent Postgres connections reserve one 
   for (const [i, tenantId] of ['a','b','a'].entries()) await stores[0].saveSnapshot({ id: randomUUID(), tenantId: request.tenantId + tenantId, projectId: 'p', createdAt: new Date(Date.now() + i).toISOString() });
   const scoped = await third.listSnapshots({ tenantIds: [request.tenantId + 'a'], projectIds: ['p'], limit: 1, offset: 1 });
   assert.equal(scoped.length, 1); assert.equal(scoped[0].tenantId, request.tenantId + 'a');
+  const overview = await third.getOverview({ tenantIds: [request.tenantId], projectIds: ['p'] });
+  assert.equal(overview.jobs.total, 2);
+  assert.equal((await third.listJobs({ tenantIds: ['outside-' + request.tenantId] })).length, 0);
   const template = await gateways[0].createTemplate({ name: 'persistent-source', snapshotId: scoped[0].id, tenantId: scoped[0].tenantId, projectId: 'p' });
   assert.deepEqual(await third.getTemplate(template.id), template);
   assert.deepEqual(await third.listTemplates({ tenantIds: [scoped[0].tenantId], projectIds: ['p'] }), [template]);

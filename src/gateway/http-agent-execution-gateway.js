@@ -145,33 +145,33 @@ async function routeRequest({ req, res, gateway, authorizer, eventBus, runningJo
 
   if (segments[1] === 'admin') {
     if (req.method === 'GET' && segments[2] === 'overview') {
-      await authorize({ req, authorizer, scope: 'admin:read' });
-      const overview = (await gateway.getOverview?.()) ?? {};
+      const auth = await authorize({ req, authorizer, scope: 'admin:read', body: Object.fromEntries(url.searchParams), list: true });
+      const overview = (await gateway.getOverview?.({ tenantIds: auth.tenantIds, projectIds: auth.projectIds })) ?? {};
       return sendJson(res, 200, overview);
     }
     if (req.method === 'GET' && segments[2] === 'jobs') {
-      await authorize({ req, authorizer, scope: 'admin:read' });
+      const auth = await authorize({ req, authorizer, scope: 'admin:read', body: Object.fromEntries(url.searchParams), list: true });
       const tenantId = url.searchParams.get('tenantId') || undefined;
       const projectId = url.searchParams.get('projectId') || undefined;
       const sessionId = url.searchParams.get('sessionId') || undefined;
       const state = url.searchParams.get('state') || undefined;
       const limit = Number.parseInt(url.searchParams.get('limit') || '50', 10);
       const offset = Number.parseInt(url.searchParams.get('offset') || '0', 10);
-      const items = (await gateway.listJobs?.({ tenantId, projectId, sessionId, state, limit, offset })) ?? [];
+      const items = (await gateway.listJobs?.({ tenantIds: auth.tenantIds, projectIds: auth.projectIds, tenantId, projectId, sessionId, state, limit, offset })) ?? [];
       return sendJson(res, 200, { items: items.map(sanitizeJob), limit, offset });
     }
     if (req.method === 'GET' && segments[2] === 'sessions') {
-      await authorize({ req, authorizer, scope: 'admin:read' });
+      const auth = await authorize({ req, authorizer, scope: 'admin:read', body: Object.fromEntries(url.searchParams), list: true });
       const tenantId = url.searchParams.get('tenantId') || undefined;
       const projectId = url.searchParams.get('projectId') || undefined;
       const state = url.searchParams.get('state') || undefined;
       const limit = Number.parseInt(url.searchParams.get('limit') || '50', 10);
       const offset = Number.parseInt(url.searchParams.get('offset') || '0', 10);
-      const items = (await gateway.listSessions?.({ tenantId, projectId, state, limit, offset })) ?? [];
+      const items = (await gateway.listSessions?.({ tenantIds: auth.tenantIds, projectIds: auth.projectIds, tenantId, projectId, state, limit, offset })) ?? [];
       return sendJson(res, 200, { items: items.map(sanitizeSession), limit, offset });
     }
     if (req.method === 'GET' && segments[2] === 'audit-records') {
-      await authorize({ req, authorizer, scope: 'admin:read' });
+      const auth = await authorize({ req, authorizer, scope: 'admin:read', body: Object.fromEntries(url.searchParams), list: true });
       const tokenRef = url.searchParams.get('tokenRef') || undefined;
       const actor = url.searchParams.get('actor') || undefined;
       const action = url.searchParams.get('action') || undefined;
@@ -180,21 +180,23 @@ async function routeRequest({ req, res, gateway, authorizer, eventBus, runningJo
       const projectId = url.searchParams.get('projectId') || undefined;
       const limit = Number.parseInt(url.searchParams.get('limit') || '50', 10);
       const offset = Number.parseInt(url.searchParams.get('offset') || '0', 10);
-      const items = (await gateway.listAuditRecords?.({ tokenRef, actor, action, outcome, tenantId, projectId, limit, offset })) ?? [];
+      const items = (await gateway.listAuditRecords?.({ tenantIds: auth.tenantIds, projectIds: auth.projectIds, tokenRef, actor, action, outcome, tenantId, projectId, limit, offset })) ?? [];
       return sendJson(res, 200, { items, limit, offset });
     }
     if (req.method === 'GET' && segments[2] === 'idempotency-keys') {
-      await authorize({ req, authorizer, scope: 'admin:read' });
+      const auth = await authorize({ req, authorizer, scope: 'admin:read', body: Object.fromEntries(url.searchParams), list: true });
       const tenantId = url.searchParams.get('tenantId') || undefined;
       const scope = url.searchParams.get('scope') || undefined;
       const limit = Number.parseInt(url.searchParams.get('limit') || '50', 10);
       const offset = Number.parseInt(url.searchParams.get('offset') || '0', 10);
-      const items = (await gateway.listIdempotencyKeys?.({ tenantId, scope, limit, offset })) ?? [];
+      const items = (await gateway.listIdempotencyKeys?.({ tenantIds: auth.tenantIds, projectIds: auth.projectIds, tenantId, scope, limit, offset })) ?? [];
       return sendJson(res, 200, { items, limit, offset });
     }
     if (req.method === 'POST' && segments[2] === 'jobs' && segments[4] === 'cancel') {
       const jobId = segments[3];
-      await authorize({ req, authorizer, scope: 'admin:operate' });
+      const existing = await gateway.store.getJob(jobId);
+      if (!existing) return sendJson(res, 404, { error: 'Job not found' });
+      await authorize({ req, authorizer, scope: 'admin:operate', resource: existing });
       const { reason = 'cancelled by admin' } = await readJson(req, { allowEmpty: true });
       const job = await gateway.cancel(jobId, reason);
       return job
@@ -203,7 +205,10 @@ async function routeRequest({ req, res, gateway, authorizer, eventBus, runningJo
     }
     if (req.method === 'POST' && segments[2] === 'sessions' && segments[4] === 'stop') {
       const sessionId = segments[3];
-      await authorize({ req, authorizer, scope: 'admin:operate' });
+      const existing = await gateway.store.getSession(sessionId);
+      if (!existing) return sendJson(res, 404, { error: 'Session not found' });
+      await authorize({ req, authorizer, scope: 'admin:operate', resource: existing });
+      await assertRestMutationAllowed(gateway, sessionId);
       const session = await gateway.stopSession?.(sessionId);
       return session
         ? sendJson(res, 202, sanitizeSession(session))
@@ -440,21 +445,26 @@ async function routeRequest({ req, res, gateway, authorizer, eventBus, runningJo
       reservation = await gateway.reserveJobSubmission({ idempotencyKey, request });
       if (!reservation.acquired) {
         const known = await gateway.getJob(reservation.record.resourceId);
+        if (known && ((known.tenantId ?? null) !== (request.tenantId ?? null)
+          || (known.projectId ?? null) !== (request.projectId ?? null))) {
+          return sendJson(res, 409, { error: 'Job ID is already in use' });
+        }
         res.setHeader('Idempotency-Replayed', 'true');
         res.setHeader('Idempotency-Status', known ? 'replayed' : 'acceptance-uncertain');
         return sendJson(res, reservation.record.statusCode, reservation.record.responseBody);
       }
     }
-    const events = [];
     let jobId = reservation?.record.resourceId ?? request.id;
+    let accepted;
+    const acceptance = new Promise(resolve => { accepted = resolve; });
     const publish = (event) => {
-      events.push(event);
+      accepted(event.jobId);
       eventBus.emit(event.jobId, event);
     };
     const completion = gateway.createJob(withAuthContext({ ...request, ...(jobId ? { id: jobId } : {}) }, auth), publish)
       .finally(() => runningJobs.delete(jobId));
     completion.catch(() => {});
-    jobId = await waitForJobId({ gateway, events, completion, requestedJobId: jobId });
+    jobId = await Promise.race([acceptance, completion.then(result => result?.id)]);
     if (!jobId || !(await gateway.getJob(jobId))) {
       await completion;
       throw Object.assign(new Error('Job was not accepted'), { statusCode: 500 });
@@ -673,19 +683,6 @@ async function findArtifact(gateway, artifactId) {
     return gateway.getArtifact(artifactId);
   }
   return null;
-}
-
-async function waitForJobId({ gateway, events, completion, requestedJobId = null }) {
-  for (let index = 0; index < 20; index += 1) {
-    const queued = events.find((event) => event.jobId);
-    const candidate = requestedJobId ?? queued?.jobId;
-    if (candidate && await gateway.getJob(candidate)) {
-      return candidate;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
-  const result = await completion;
-  return result?.id;
 }
 
 async function readJson(req, { allowEmpty = false } = {}) {

@@ -29,6 +29,14 @@ test('scoped snapshots/templates filter before pagination and reject foreign der
     const template = await gateway.createTemplate({ name: 'source', snapshotId: snapshot.id, tenantId, projectId });
     resources.push({ session, snapshot, template });
   }
+  // admin:* remains intersected with credential bounds.
+  assert.equal((await call('admin/overview')).body.sessions.total, 1);
+  assert.deepEqual((await call('admin/sessions?limit=1&offset=1')).body.items, []);
+  assert.equal((await call('admin/sessions?tenantId=b')).status, 403);
+  assert.equal((await call(`admin/sessions/${resources[1].session.id}/stop`, {})).status, 403);
+  await gateway.store.saveJob({ id: 'foreign-job', tenantId: 'b', projectId: 'p', state: 'running' });
+  assert.equal((await call('admin/jobs/foreign-job/cancel', {})).status, 403);
+  assert.deepEqual((await call('admin/jobs')).body.items, []);
   let creates = 0, runs = 0;
   const create = provider.createSession.bind(provider), run = provider.runJob.bind(provider);
   provider.createSession = (...a) => { creates++; return create(...a); };
@@ -42,6 +50,7 @@ test('scoped snapshots/templates filter before pagination and reject foreign der
     assert.equal((await call(`${kind}?projectId=q`)).status, 403);
   }
   for (const foreign of resources.slice(1)) {
+    assert.equal((await call('sessions', { id: foreign.session.id })).status, 409);
     assert.equal((await call(`snapshots/${foreign.snapshot.id}`)).status, 403);
     assert.equal((await call(`templates/${foreign.template.id}`)).status, 403);
     for (const scope of [{}, { tenantId: 'a', projectId: 'p' }]) {
@@ -53,6 +62,8 @@ test('scoped snapshots/templates filter before pagination and reject foreign der
     assert.equal((await call('jobs', { tenantId: 'a', projectId: 'p', sessionId: foreign.session.id,
       executionMode: 'workspace_session', command: { argv: ['sh','-c','true'] }, timeoutSeconds: 10 })).status, 403);
   }
+  assert.equal((await call('jobs', { id: 'foreign-job', executionMode: 'ephemeral_interpreter',
+    command: { argv: ['true'] }, timeoutSeconds: 10 })).status, 409);
   provider.getSnapshot = async () => ({ id: 'provider-only', snapshotPath: '/private' });
   assert.equal((await call('snapshots/provider-only')).status, 404);
   assert.equal((await call('sessions', { snapshotId: 'provider-only' })).status, 403);

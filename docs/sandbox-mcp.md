@@ -1,6 +1,6 @@
 # Partners Sandbox MCP
 
-Partners exposes **seven tools** at `/mcp` using stateless Streamable HTTP and protocol **2025-11-25**. The official SDK is pinned to **1.31.0**. It uses JSON responses, no transport session IDs, and no legacy HTTP+SSE endpoint. Workspace sessions survive disconnects. Unsupported protocol versions fail explicitly.
+Partners exposes **seven tools** at `/mcp` using stateless Streamable HTTP and protocol **2025-11-25**. The official SDK is pinned to **1.31.0**. It uses JSON responses, no transport session IDs, and no legacy HTTP+SSE endpoint. Workspace sessions survive disconnects. Initialize negotiates through the official SDK, including supported older clients; unknown version headers on subsequent requests fail explicitly.
 
 ## Enable
 

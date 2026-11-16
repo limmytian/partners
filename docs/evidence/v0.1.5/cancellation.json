@@ -1,0 +1,174 @@
+{
+  "run": "8560164f-6722-486c-b990-c28077453217",
+  "startedAt": "2026-11-16T11:28:05.811Z",
+  "timebox": "up to half an effective workday; stop once a decisive counterexample exists",
+  "cases": [
+    {
+      "name": "term-resistant-detached-descendants",
+      "pid": 14,
+      "termStatus": 200,
+      "killStatus": 200,
+      "repeatedKillStatus": 404,
+      "before": {
+        "parent": {
+          "pid": 14,
+          "alive": true,
+          "heartbeat": 1794828486892542000
+        },
+        "child": {
+          "pid": 15,
+          "alive": true,
+          "heartbeat": 1794828486832542000
+        },
+        "grandchild": {
+          "error": "FileNotFoundError"
+        }
+      },
+      "afterTerm": {
+        "parent": {
+          "pid": 14,
+          "alive": true,
+          "heartbeat": 1794828487420542000
+        },
+        "child": {
+          "pid": 15,
+          "alive": true,
+          "heartbeat": 1794828487348542000
+        },
+        "grandchild": {
+          "pid": 16,
+          "alive": true,
+          "heartbeat": 1794828487428542000
+        }
+      },
+      "afterKill": {
+        "parent": {
+          "pid": 14,
+          "alive": false,
+          "heartbeat": 1794828487420542000
+        },
+        "child": {
+          "pid": 15,
+          "alive": true,
+          "heartbeat": 1794828487972542000
+        },
+        "grandchild": {
+          "pid": 16,
+          "alive": true,
+          "heartbeat": 1794828487948542000
+        }
+      },
+      "later": {
+        "parent": {
+          "pid": 14,
+          "alive": false,
+          "heartbeat": 1794828487420542000
+        },
+        "child": {
+          "pid": 15,
+          "alive": true,
+          "heartbeat": 1794828488388542000
+        },
+        "grandchild": {
+          "pid": 16,
+          "alive": true,
+          "heartbeat": 1794828488364542000
+        }
+      }
+    },
+    {
+      "name": "transport-disconnect",
+      "before": {
+        "parent": {
+          "pid": 21,
+          "alive": true,
+          "heartbeat": 1794828488904542000
+        },
+        "child": {
+          "pid": 22,
+          "alive": true,
+          "heartbeat": 1794828488848542000
+        },
+        "grandchild": {
+          "pid": 23,
+          "alive": true,
+          "heartbeat": 1794828488880542000
+        }
+      },
+      "after": {
+        "parent": {
+          "pid": 21,
+          "alive": true,
+          "heartbeat": 1794828489320542000
+        },
+        "child": {
+          "pid": 22,
+          "alive": true,
+          "heartbeat": 1794828489368542000
+        },
+        "grandchild": {
+          "pid": 23,
+          "alive": true,
+          "heartbeat": 1794828489400542000
+        }
+      },
+      "processContinues": true
+    },
+    {
+      "name": "connect-deadline",
+      "before": {
+        "parent": {
+          "pid": 26,
+          "alive": false,
+          "heartbeat": 1794828490408542000
+        },
+        "child": {
+          "pid": 27,
+          "alive": true,
+          "heartbeat": 1794828490984542000
+        },
+        "grandchild": {
+          "pid": 28,
+          "alive": true,
+          "heartbeat": 1794828490920542000
+        }
+      },
+      "after": {
+        "parent": {
+          "pid": 26,
+          "alive": false,
+          "heartbeat": 1794828490408542000
+        },
+        "child": {
+          "pid": 27,
+          "alive": true,
+          "heartbeat": 1794828491400542000
+        },
+        "grandchild": {
+          "pid": 28,
+          "alive": true,
+          "heartbeat": 1794828491440542000
+        }
+      },
+      "processContinues": false,
+      "events": [
+        {
+          "error": {
+            "code": "deadline_exceeded",
+            "message": "context deadline exceeded"
+          }
+        }
+      ]
+    }
+  ],
+  "sandboxId": "7fedcbbba2a04673aa140102dd178a93",
+  "survivingDescendants": [
+    "child",
+    "grandchild"
+  ],
+  "workspaceReusable": true,
+  "conclusion": "NO-GO: killing the selected envd process does not stop detached descendants; retain sandbox destruction",
+  "status": "completed",
+  "cleanup": "sandbox deletion confirmed",
+  "completedAt": "2026-11-16T11:28:11.644Z"
+}

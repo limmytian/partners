@@ -256,9 +256,10 @@ export class PostgresGatewayStore {
     });
   }
 
-  async listSessions({ tenantId, projectId, state, limit = 50, offset = 0 } = {}) {
+  async listSessions({ tenantIds, projectIds, tenantId, projectId, state, limit = 50, offset = 0 } = {}) {
     const conditions = [];
     const values = [];
+    appendScope(conditions, values, { tenantIds, projectIds }, 'project_id');
     if (tenantId) {
       values.push(tenantId);
       conditions.push(`tenant_id = $${values.length}`);
@@ -300,7 +301,7 @@ export class PostgresGatewayStore {
     return result.rows[0].count;
   }
 
-  async saveJob(job) {
+  async saveJob(job, { insertOnly = false } = {}) {
     const record = clone(job);
     const result = await this.#single({
       name: 'saveJob',
@@ -315,7 +316,7 @@ export class PostgresGatewayStore {
           $12, $13, $14::jsonb, $15::jsonb, $16::timestamptz,
           $17::timestamptz, $18::timestamptz
         )
-        ON CONFLICT (id) DO UPDATE SET
+        ON CONFLICT (id) ${insertOnly ? 'DO NOTHING' : `DO UPDATE SET
           tenant_id = EXCLUDED.tenant_id,
           project_id = EXCLUDED.project_id,
           session_id = EXCLUDED.session_id,
@@ -331,7 +332,7 @@ export class PostgresGatewayStore {
           metadata = EXCLUDED.metadata,
           record = EXCLUDED.record,
           updated_at = EXCLUDED.updated_at,
-          completed_at = EXCLUDED.completed_at
+          completed_at = EXCLUDED.completed_at`}
         RETURNING record
       `,
       values: [
@@ -355,6 +356,9 @@ export class PostgresGatewayStore {
         nullableTimestamp(record.completedAt),
       ],
     });
+    if (insertOnly && result.rows.length === 0) {
+      throw Object.assign(new Error('Job ID is already in use'), { statusCode: 409 });
+    }
     return clone(result.rows[0].record);
   }
 
@@ -369,6 +373,7 @@ export class PostgresGatewayStore {
   async listJobs(options = {}) {
     const conditions = [];
     const values = [];
+    appendScope(conditions, values, options);
     if (options.tenantId) {
       values.push(options.tenantId);
       conditions.push(`tenant_id = $${values.length}`);
@@ -797,6 +802,7 @@ export class PostgresGatewayStore {
   }
 
   async listAuditRecords({
+    tenantIds, projectIds,
     tokenRef,
     actor,
     action,
@@ -854,9 +860,10 @@ export class PostgresGatewayStore {
     return result.rows.map(auditFromRow);
   }
 
-  async listIdempotencyKeys({ tenantId, scope, limit = 50, offset = 0 } = {}) {
+  async listIdempotencyKeys({ tenantIds, projectIds, tenantId, scope, limit = 50, offset = 0 } = {}) {
     const conditions = [];
     const values = [];
+    appendScope(conditions, values, { tenantIds, projectIds }, "record->>'projectId'");
     if (tenantId) {
       values.push(tenantId);
       conditions.push(`tenant_id = $${values.length}`);
@@ -884,30 +891,40 @@ export class PostgresGatewayStore {
     return result.rows.map((row) => clone(row.record));
   }
 
-  async getOverview() {
+  async getOverview(options = {}) {
+    const conditions = [], values = [];
+    appendScope(conditions, values, options);
+    const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+    const keyConditions = [], keyValues = [];
+    appendScope(keyConditions, keyValues, options, "record->>'projectId'");
+    const keyWhere = keyConditions.length ? 'WHERE ' + keyConditions.join(' AND ') : '';
     const jobsResult = await this.#single({
+      values,
       name: 'overviewJobs',
       sql: `
         SELECT state, count(*)::int AS count
-        FROM gateway_jobs
+        FROM gateway_jobs ${where}
         GROUP BY state
       `,
     });
     const sessionsResult = await this.#single({
+      values,
       name: 'overviewSessions',
       sql: `
         SELECT state, count(*)::int AS count
-        FROM gateway_sessions
+        FROM gateway_sessions ${where}
         GROUP BY state
       `,
     });
     const auditCountResult = await this.#single({
+      values,
       name: 'overviewAuditCount',
-      sql: `SELECT count(*)::int AS count FROM gateway_audit_records`,
+      sql: `SELECT count(*)::int AS count FROM gateway_audit_records ${where}`,
     });
     const idempotencyCountResult = await this.#single({
+      values: keyValues,
       name: 'overviewIdempotencyCount',
-      sql: `SELECT count(*)::int AS count FROM gateway_idempotency_keys`,
+      sql: `SELECT count(*)::int AS count FROM gateway_idempotency_keys ${keyWhere}`,
     });
 
     const jobsByState = Object.fromEntries(jobsResult.rows.map((r) => [r.state, r.count]));
@@ -1111,4 +1128,10 @@ function clone(value) {
     return value ?? null;
   }
   return structuredClone(value);
+}
+
+function appendScope(conditions, values, { tenantIds, projectIds }, projectColumn = 'project_id') {
+  for (const [ids, column] of [[tenantIds, 'tenant_id'], [projectIds, projectColumn]]) {
+    if (ids?.length) { values.push(ids); conditions.push(`${column}=ANY($${values.length}::text[])`); }
+  }
 }

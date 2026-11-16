@@ -38,6 +38,23 @@ export class InMemoryAgentExecutionGateway {
   }
 
   async createSession(request = {}) {
+    if (!request.id) return this.#provisionSession(request);
+
+    const coordinator = await this.#getCoordinator();
+    const key = 'session-create:' + request.id;
+    const { acquired, record } = await coordinator.claim(key, '', { state: 'pending' });
+    if (!acquired) throw Object.assign(new Error('Session ID is already in use'), { statusCode: 409 });
+    try {
+      if (await this.store.getSession(request.id)) {
+        throw Object.assign(new Error('Session ID is already in use'), { statusCode: 409 });
+      }
+      return await this.#provisionSession(request);
+    } finally {
+      await coordinator.release(key, record.owner);
+    }
+  }
+
+  async #provisionSession(request) {
     if (!this.provider.createSession) {
       throw new Error('Configured provider does not support sessions');
     }
@@ -264,7 +281,7 @@ export class InMemoryAgentExecutionGateway {
     return this.provider.createPtySession(sessionId, options);
   }
 
-  async runJob(request, onEvent = () => {}) {
+  async runJob(request, onEvent = () => {}, { insertOnly = false } = {}) {
     assertExecutionJobRequest(request);
     if (request.executionMode === 'workspace_session' && this.provider.restoreSession) {
       const storedSession = await this.store.getSession(request.sessionId);
@@ -295,7 +312,7 @@ export class InMemoryAgentExecutionGateway {
       actor: providerRequest.actor ?? null,
     };
 
-    await this.store.saveJob(job);
+    await this.store.saveJob(job, { insertOnly });
     await this.store.initializeJobBuckets(jobId);
     this.metrics?.recordJobStarted?.({
       executionMode: job.executionMode,
@@ -359,15 +376,23 @@ export class InMemoryAgentExecutionGateway {
   }
 
   async createJob(request, onEvent = () => {}) {
-    return this.runJob(request, onEvent);
+    return this.runJob(request, onEvent, { insertOnly: true });
+  }
+
+  async #getCoordinator() {
+    const coordinator = gatewayCoordinator(this.store);
+    this.coordinationReady ??= coordinator.migrate().catch(error => {
+      this.coordinationReady = null;
+      throw error;
+    });
+    await this.coordinationReady;
+    return coordinator;
   }
 
   async reserveJobSubmission({ idempotencyKey, request }) {
     assertExecutionJobRequest(request);
     const context = createIdempotencyContext({ idempotencyKey, scope: IdempotencyScope.JobsCreate, request, now: this.#now() });
-    const coordinator = gatewayCoordinator(this.store);
-    this.coordinationReady ??= coordinator.migrate();
-    await this.coordinationReady;
+    const coordinator = await this.#getCoordinator();
     const resourceId = request.id ?? `job_${randomUUID()}`;
     const responseBody = { id: resourceId, state: JobState.Queued, executionMode: request.executionMode,
       tenantId: request.tenantId ?? null, projectId: request.projectId ?? null, sessionId: request.sessionId ?? null,
@@ -433,8 +458,8 @@ export class InMemoryAgentExecutionGateway {
     return this.store.listIdempotencyKeys?.(options) ?? [];
   }
 
-  async getOverview() {
-    const overview = (await this.store.getOverview?.()) ?? {};
+  async getOverview(options = {}) {
+    const overview = (await this.store.getOverview?.(options)) ?? {};
     return {
       ...overview,
       uptimeSeconds: Math.floor(process.uptime()),
