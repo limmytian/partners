@@ -7,7 +7,7 @@ import {
   assertExecutionJobRequest,
   createEvent,
 } from '../core/provider-contract.js';
-import { gatewayCoordinator } from '../mcp/coordination.js';
+import { gatewayCoordinator, hash } from '../mcp/coordination.js';
 import { InMemoryGatewayStore } from './gateway-store.js';
 import {
   IdempotencyScope,
@@ -390,19 +390,35 @@ export class InMemoryAgentExecutionGateway {
   }
 
   async reserveJobSubmission({ idempotencyKey, request }) {
-    assertExecutionJobRequest(request);
-    const context = createIdempotencyContext({ idempotencyKey, scope: IdempotencyScope.JobsCreate, request, now: this.#now() });
+    const now = this.#now();
+    const context = createIdempotencyContext({ idempotencyKey, scope: IdempotencyScope.JobsCreate, request, now });
     const coordinator = await this.#getCoordinator();
+    const key = 'rest:' + context.storeKey;
+    const requestHash = hash(request);
+    let existing = await coordinator.get(key);
+    if (!existing) {
+      const legacy = await this.getJobIdempotencyRecord({ idempotencyKey, request, now });
+      if (legacy) {
+        // New submissions also write a legacy receipt for admin views. Prefer
+        // their full-request digest over the legacy digest with secret fields removed.
+        existing = await coordinator.get(key);
+        if (!existing) {
+          if (!legacy.matchesRequest) throw idempotencyConflict();
+          return { acquired: false, record: legacy };
+        }
+      }
+    }
+    if (!existing) assertExecutionJobRequest(request);
     const resourceId = request.id ?? `job_${randomUUID()}`;
     const responseBody = { id: resourceId, state: JobState.Queued, executionMode: request.executionMode,
       tenantId: request.tenantId ?? null, projectId: request.projectId ?? null, sessionId: request.sessionId ?? null,
       provider: this.provider.name, createdAt: context.createdAt };
-    const result = await coordinator.claim('rest:' + context.storeKey, context.requestHash, {
+    const result = existing ? { acquired: false, record: existing } : await coordinator.claim(key, requestHash, {
       state: 'accepted', resourceId, responseBody, statusCode: 202, expiresAt: context.expiresAt,
       createdAt: context.createdAt, scope: context.scope, tenantId: context.tenantId, projectId: context.projectId,
     });
     if (!result.record) throw Object.assign(new Error('Submission state unavailable; retry with the same key'), { statusCode: 503 });
-    if (result.record.requestHash !== context.requestHash) throw Object.assign(new Error('Idempotency-Key has already been used with a different request body'), { statusCode: 409 });
+    if (result.record.requestHash !== requestHash) throw idempotencyConflict();
     if (isIdempotencyRecordExpired(result.record, this.#now())) throw Object.assign(new Error('Idempotency-Key expired; inspect the original job before using a new key'), { statusCode: 409 });
     return result;
   }
@@ -626,6 +642,10 @@ function durationMs(startedAt, completedAt) {
     return 0;
   }
   return completed - started;
+}
+
+function idempotencyConflict() {
+  return Object.assign(new Error('Idempotency-Key has already been used with a different request body'), { statusCode: 409 });
 }
 
 function assertSameScope(request, source) {

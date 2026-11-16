@@ -429,17 +429,6 @@ async function routeRequest({ req, res, gateway, authorizer, eventBus, runningJo
     }
     const idempotencyKey = singleHeader(req.headers['idempotency-key'], 'Idempotency-Key');
     const hasIdempotencyKey = idempotencyKey !== null;
-    if (hasIdempotencyKey) {
-      const replay = await gateway.getJobIdempotencyRecord?.({ idempotencyKey, request });
-      if (replay) {
-        return replay.matchesRequest
-          ? sendJson(res, replay.statusCode ?? 202, replay.responseBody)
-          : sendJson(res, 409, {
-              error: 'Idempotency-Key has already been used with a different request body',
-            });
-      }
-    }
-
     let reservation;
     if (hasIdempotencyKey) {
       reservation = await gateway.reserveJobSubmission({ idempotencyKey, request });
@@ -451,7 +440,7 @@ async function routeRequest({ req, res, gateway, authorizer, eventBus, runningJo
         }
         res.setHeader('Idempotency-Replayed', 'true');
         res.setHeader('Idempotency-Status', known ? 'replayed' : 'acceptance-uncertain');
-        return sendJson(res, reservation.record.statusCode, reservation.record.responseBody);
+        return sendJson(res, reservation.record.statusCode ?? 202, reservation.record.responseBody);
       }
     }
     let jobId = reservation?.record.resourceId ?? request.id;

@@ -434,7 +434,7 @@ test('replays identical POST /v1/jobs requests with Idempotency-Key', async () =
       executionMode: ExecutionMode.EphemeralInterpreter,
       tenantId: 'tenant_1',
       projectId: 'project_1',
-      command: { argv: [process.execPath, '-e', 'console.log("idem")'] },
+      command: { argv: [process.execPath, '-e', 'console.log("idem")'], env: { API_TOKEN: 'first-value' } },
       timeoutSeconds: 30,
     };
     const headers = { 'Idempotency-Key': 'tw-task-http-1' };
@@ -453,6 +453,12 @@ test('replays identical POST /v1/jobs requests with Idempotency-Key', async () =
     assert.equal(accepted.status, 202);
     assert.equal(replay.status, 202);
     assert.equal(replay.body.id, accepted.body.id);
+    const changedCredential = await jsonFetch(harness.url('/v1/jobs'), {
+      method: 'POST',
+      headers,
+      body: { ...body, command: { ...body.command, env: { API_TOKEN: 'second-value' } } },
+    });
+    assert.equal(changedCredential.status, 409);
     assert.equal(provider.runCount(), 1);
   } finally {
     await harness.close();

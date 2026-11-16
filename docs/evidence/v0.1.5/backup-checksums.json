@@ -55,5 +55,13 @@
   "nodes.json": {
     "bytes": 39843,
     "sha256": "1d07cf49b872025493b6323b04bdf171d8f1d6ff9a97a048f835269b922b5636"
+  },
+  "mysql-maintenance.sql": {
+    "bytes": 4315589,
+    "sha256": "d5f23e147b788ae70d8b21e793d87096ba228da40ac5a223676e7cb04e51a613"
+  },
+  "redis-maintenance.tar.gz": {
+    "bytes": 7682,
+    "sha256": "c108603311f23d94376ad34a7159bff4c29242d9a79cdc44f4bfba09814fba71"
   }
 }
