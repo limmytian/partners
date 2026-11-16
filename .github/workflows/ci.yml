@@ -61,7 +61,7 @@ jobs:
           docker network create partners-test
           docker run -d --name minio --network partners-test -p 9000:9000 \
             -e MINIO_ROOT_USER=partners -e MINIO_ROOT_PASSWORD=partners-test-secret \
-            quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z server /data
+            cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/minio:RELEASE.2025-09-07T16-13-09Z@sha256:37a173a1c3042bdbbd9904bd3ab7c4c7b17f607b268220a607a685c14d94d1cb server /data
           for i in $(seq 1 60); do
             if curl -fsS http://127.0.0.1:9000/minio/health/ready; then break; fi
             sleep 1

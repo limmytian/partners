@@ -21,7 +21,7 @@
     "test": "node --test",
     "mcp:smoke": "node scripts/mcp-smoke.mjs",
     "mcp:validate-live": "node scripts/mcp-live-validation.mjs",
-    "test:integration": "node scripts/test-integration.mjs"
+    "test:integration": "node scripts/integration-check.mjs"
   },
   "engines": {
     "node": ">=20"
