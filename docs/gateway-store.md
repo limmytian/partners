@@ -158,3 +158,8 @@ Suggested first durable policy:
 
 Durable cleanup must delete bytes through ArtifactStore before removing artifact
 manifest rows unless the backend owns independent lifecycle policies.
+
+
+### v0.1.5 additive schema
+
+`gateway_workspace_sources` stores trusted snapshots/templates with tenant/project columns used before pagination. REST atomic submission also uses the existing `gateway_mcp_operations` coordinator table, under a distinct `rest:` key namespace. Startup/on-demand migration is additive and advisory-lock protected. Rolling application rollback can leave these extra tables intact; do not delete coordinator intent records merely to retry an uncertain execution.

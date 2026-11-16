@@ -1,0 +1,55 @@
+--- a/slugify.py
++++ b/slugify.py
+@@ -1,2 +1,5 @@
++from unicodedata import normalize
++
++
+ def slugify(text):
+-    return text.lower().replace(' ', '-')
++    return '-'.join(normalize('NFKC', text).lower().split())
+--- a/test_slugify.py
++++ b/test_slugify.py
+@@ -9,3 +9,18 @@
+
+     def test_chinese_text(self):
+         self.assertEqual(slugify('你好 世界'), '你好-世界')
++
++    def test_trims_and_collapses_whitespace(self):
++        self.assertEqual(slugify('  Hello \t  World\t '), 'hello-world')
++
++    def test_empty_input(self):
++        self.assertEqual(slugify(''), '')
++
++    def test_whitespace_only_input(self):
++        self.assertEqual(slugify(' \t\n\r\u2003 '), '')
++
++    def test_mixed_whitespace(self):
++        self.assertEqual(slugify('\n Hello\r\n\t世界\u2003Again \t'), 'hello-世界-again')
++
++    def test_normalizes_fullwidth_text(self):
++        self.assertEqual(slugify('Ｈｅｌｌｏ　Ｗｏｒｌｄ'), 'hello-world')
+test_chinese_text (test_slugify.SlugifyTests.test_chinese_text) ... ok
+test_empty_input (test_slugify.SlugifyTests.test_empty_input) ... ok
+test_hello_world (test_slugify.SlugifyTests.test_hello_world) ... ok
+test_mixed_whitespace (test_slugify.SlugifyTests.test_mixed_whitespace) ... ok
+test_normalizes_fullwidth_text (test_slugify.SlugifyTests.test_normalizes_fullwidth_text) ... ok
+test_trims_and_collapses_whitespace (test_slugify.SlugifyTests.test_trims_and_collapses_whitespace) ... ok
+test_whitespace_only_input (test_slugify.SlugifyTests.test_whitespace_only_input) ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.001s
+
+OK
+
+test_chinese_text (test_slugify.SlugifyTests.test_chinese_text) ... ok
+test_empty_input (test_slugify.SlugifyTests.test_empty_input) ... ok
+test_hello_world (test_slugify.SlugifyTests.test_hello_world) ... ok
+test_mixed_whitespace (test_slugify.SlugifyTests.test_mixed_whitespace) ... ok
+test_normalizes_fullwidth_text (test_slugify.SlugifyTests.test_normalizes_fullwidth_text) ... ok
+test_trims_and_collapses_whitespace (test_slugify.SlugifyTests.test_trims_and_collapses_whitespace) ... ok
+test_whitespace_only_input (test_slugify.SlugifyTests.test_whitespace_only_input) ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.001s
+
+OK

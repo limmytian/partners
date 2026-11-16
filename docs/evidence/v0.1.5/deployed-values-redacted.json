@@ -1,0 +1,223 @@
+{
+  "bootstrap": {
+    "pvmHostKernel": {
+      "enabled": false,
+      "startupGate": {
+        "enabled": false,
+        "requirePreflight": true
+      }
+    }
+  },
+  "cubeNode": {
+    "pvmGuestKernel": {
+      "enabled": false
+    },
+    "hostNetwork": true,
+    "enabled": true
+  },
+  "cubeProxy": {
+    "advertiseIP": "192.168.1.237",
+    "configureClusterDNS": false,
+    "domain": "cube.app",
+    "tls": {
+      "mode": "selfSigned"
+    }
+  },
+  "global": {
+    "imageRegistry": "cube-sandbox-cn.tencentcloudcr.com"
+  },
+  "images": {
+    "api": {
+      "pullPolicy": "IfNotPresent",
+      "repository": "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cube-api",
+      "tag": "v0.8.0@sha256:fe09ff69fc311e654917a4799392b3734140315579132751bf5b50bc360754de"
+    },
+    "cubeAgent": {
+      "pullPolicy": "IfNotPresent",
+      "repository": "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cube-agent",
+      "tag": "v0.8.0@sha256:9c0d78f725f54e684cc289626d14f1cbf263bdf745951c603129e9ce8e4ef4ec"
+    },
+    "cubeEgress": {
+      "pullPolicy": "IfNotPresent",
+      "repository": "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cube-egress",
+      "tag": "v0.8.0@sha256:5389ae351a3758fc6f5739177bbd0dc5a63a4b035b64f74bf502c9c9fdcafd53"
+    },
+    "cubeEgressNet": {
+      "pullPolicy": "IfNotPresent",
+      "repository": "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cube-egress-net",
+      "tag": "v0.8.0@sha256:fd91ca6b8fb767010bb1a1363f43460ecb9818c1e67c67c105ee46843f4c8788"
+    },
+    "cubeGuest": {
+      "pullPolicy": "IfNotPresent",
+      "repository": "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cube-guest",
+      "tag": "v0.8.0@sha256:c9e0f8836fa40b58f52d6c274f8c714f5938d48f20708a2220205198cf231bda"
+    },
+    "cubeKernel": {
+      "pullPolicy": "IfNotPresent",
+      "repository": "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cube-kernel",
+      "tag": "v0.8.0@sha256:0a449d95680d33a80c079904603b9db978ff6e5370c5ec925bc25f699ecc70d8"
+    },
+    "cubeS3lvol": {
+      "pullPolicy": "IfNotPresent",
+      "repository": "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cube-s3lvol",
+      "tag": "v0.7.2"
+    },
+    "cubeShim": {
+      "pullPolicy": "IfNotPresent",
+      "repository": "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cube-shim",
+      "tag": "v0.8.0@sha256:5000b490d0504e188ca3f929fd2e748969479c077afa0fbd52d4049dff420bbb"
+    },
+    "cubelet": {
+      "pullPolicy": "IfNotPresent",
+      "repository": "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cubelet",
+      "tag": "v0.8.0@sha256:e1e8f1225106906d6eeb683aa37c78a25e63956b660ececa79245539754f591d"
+    },
+    "cubemastercli": {
+      "pullPolicy": "IfNotPresent",
+      "repository": "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cubemastercli",
+      "tag": "v0.8.0@sha256:030aa7c96bc3cf1d145a603896fb7800932a568e456928b63bdb18ae9ac5f0b4"
+    },
+    "kubectl": {
+      "pullPolicy": "IfNotPresent",
+      "repository": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/alpine-k8s",
+      "tag": "1.28.15"
+    },
+    "lifecycleManager": {
+      "pullPolicy": "IfNotPresent",
+      "repository": "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cube-lifecycle-manager",
+      "tag": "v0.8.0@sha256:8b616745bd32e0354f0f3543c4a186aaf92f0e2b3f18350c9d59429b3fa5afc4"
+    },
+    "master": {
+      "pullPolicy": "IfNotPresent",
+      "repository": "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cube-master",
+      "tag": "v0.8.0@sha256:10f9e19e6b69dd1b82861cce8544e990f7cb59f8df554c91b1d98dd67713a4b1"
+    },
+    "nodeInit": {
+      "pullPolicy": "IfNotPresent",
+      "repository": "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cube-node-init",
+      "tag": "v0.8.0@sha256:1fa7d1a36e6d73f47253bd36d389b6e25dccbf336823497ae05cd9cc196a425c"
+    },
+    "ops": {
+      "pullPolicy": "IfNotPresent",
+      "repository": "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cube-ops",
+      "tag": "v0.8.0@sha256:a25ba2ee190f3b9d75964f665fe43a944accc2c732998f2387ebde8b9e97d8b7"
+    },
+    "proxy": {
+      "pullPolicy": "IfNotPresent",
+      "repository": "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cube-proxy",
+      "tag": "v0.8.0@sha256:d602e9bf8b49fb590b97d5eb89e2f6534be428e3a2159b67e5d1701231354dc9"
+    },
+    "pvmHostBootstrap": {
+      "pullPolicy": "IfNotPresent",
+      "repository": "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cube-pvm-host-bootstrap",
+      "tag": "v0.7.2"
+    },
+    "templateCenter": {
+      "pullPolicy": "IfNotPresent",
+      "repository": "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cube-templatecenter",
+      "tag": "v0.8.0@sha256:9cb8bd997ae4df3604cc6c2283f362b6d5b2a9c7b63492d9ad0ea5744535326f"
+    },
+    "waitNodePrep": {
+      "pullPolicy": "IfNotPresent",
+      "repository": "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cube-wait-node-prep",
+      "tag": "v0.8.0@sha256:a361dcfb1976026ef82b76ac7f63f877063a4c36bc6edad3ae9d7e5f9d25f527"
+    },
+    "webui": {
+      "pullPolicy": "IfNotPresent",
+      "repository": "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cube-webui",
+      "tag": "v0.8.0@sha256:e83f353c969f68106dfd0d10ee6b25901dd0e30d0171cdd7380a3aada7b6eca4"
+    },
+    "opsAgent": {
+      "repository": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cube-ops-agent",
+      "tag": "v0.8.0@sha256:0ae31092899c6b7e2b551250d011d9eed01e08cb3f25dea7da1c2525c0af921a"
+    }
+  },
+  "minio": {
+    "image": {
+      "repository": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/minio",
+      "tag": "RELEASE.2025-09-07T16-13-09Z"
+    },
+    "rootUser": "cubeminio",
+    "rootPassword": ""
+  },
+  "mysql": {
+    "image": {
+      "repository": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/mysql",
+      "tag": "8.0"
+    },
+    "password": "<preserved existing credential; see restricted deployed-values>",
+    "rootPassword": "<preserved existing credential; see restricted deployed-values>",
+    "user": "cube",
+    "database": "cube_mvp"
+  },
+  "persistence": {
+    "storageClassName": "local-path"
+  },
+  "placement": {
+    "compute": {
+      "nodeSelector": {
+        "cube.tencent.com/cube-node": "true"
+      },
+      "tolerations": [
+        {
+          "effect": "NoSchedule",
+          "key": "cube.tencent.com/control",
+          "operator": "Equal",
+          "value": "true"
+        },
+        {
+          "effect": "NoSchedule",
+          "key": "cube.tencent.com/compute",
+          "operator": "Equal",
+          "value": "true"
+        }
+      ]
+    },
+    "controlPlane": {
+      "nodeSelector": {
+        "cube.tencent.com/cube-control": "true"
+      },
+      "tolerations": [
+        {
+          "effect": "NoSchedule",
+          "key": "cube.tencent.com/control",
+          "operator": "Equal",
+          "value": "true"
+        },
+        {
+          "effect": "NoSchedule",
+          "key": "cube.tencent.com/compute",
+          "operator": "Equal",
+          "value": "true"
+        }
+      ]
+    },
+    "pvm": {
+      "nodeSelector": {
+        "cube.tencent.com/allow-pvm-bootstrap": "true",
+        "cube.tencent.com/cube-node": "true"
+      },
+      "tolerations": [
+        {
+          "effect": "NoSchedule",
+          "key": "cube.tencent.com/control",
+          "operator": "Equal",
+          "value": "true"
+        },
+        {
+          "effect": "NoSchedule",
+          "key": "cube.tencent.com/compute",
+          "operator": "Equal",
+          "value": "true"
+        }
+      ]
+    }
+  },
+  "redis": {
+    "image": {
+      "repository": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/redis",
+      "tag": "7-alpine"
+    },
+    "password": "<preserved existing credential; see restricted deployed-values>"
+  }
+}

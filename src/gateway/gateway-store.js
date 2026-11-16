@@ -33,6 +33,7 @@ export class InMemoryGatewayStore {
     if (options.tenantId) list = list.filter((s) => s.tenantId === options.tenantId);
     if (options.projectId) list = list.filter((s) => s.projectId === options.projectId);
     if (options.state) list = list.filter((s) => s.state === options.state);
+    list = list.filter(record => matchesScope(record, options));
     const offset = options.offset ?? 0;
     const limit = options.limit ?? list.length;
     return list.slice(offset, offset + limit).map(clone);
@@ -42,7 +43,10 @@ export class InMemoryGatewayStore {
 
   countActiveJobs(tenantId) { return [...this.jobs.values()].filter(j => j.tenantId === tenantId && !['succeeded','failed','timed_out','cancelled'].includes(j.state)).length; }
 
-  saveJob(job) {
+  saveJob(job, { insertOnly = false } = {}) {
+    if (insertOnly && this.jobs.has(job.id)) {
+      throw Object.assign(new Error('Job ID is already in use'), { statusCode: 409 });
+    }
     this.jobs.set(job.id, clone(job));
     return clone(job);
   }
@@ -57,6 +61,7 @@ export class InMemoryGatewayStore {
     if (options.projectId) list = list.filter((j) => j.projectId === options.projectId);
     if (options.sessionId) list = list.filter((j) => j.sessionId === options.sessionId);
     if (options.state) list = list.filter((j) => j.state === options.state);
+    list = list.filter(record => matchesScope(record, options));
     const offset = options.offset ?? 0;
     const limit = options.limit ?? list.length;
     return list.slice(offset, offset + limit).map(clone);
@@ -141,6 +146,7 @@ export class InMemoryGatewayStore {
     let list = [...this.idempotencyKeys.values()].sort((a, b) => new Date(b.createdAt ?? 0) - new Date(a.createdAt ?? 0));
     if (options.tenantId) list = list.filter((k) => k.tenantId === options.tenantId);
     if (options.scope) list = list.filter((k) => k.scope === options.scope);
+    list = list.filter(record => matchesScope(record, options));
     const offset = options.offset ?? 0;
     const limit = options.limit ?? list.length;
     return list.slice(offset, offset + limit).map(clone);
@@ -160,6 +166,8 @@ export class InMemoryGatewayStore {
     if (options.tenantId) list = list.filter((s) => s.tenantId === options.tenantId);
     if (options.projectId) list = list.filter((s) => s.projectId === options.projectId);
     if (options.sessionId) list = list.filter((s) => s.sessionId === options.sessionId);
+    if (options.tenantIds?.length) list = list.filter(s => options.tenantIds.includes(s.tenantId));
+    if (options.projectIds?.length) list = list.filter(s => options.projectIds.includes(s.projectId));
     const offset = options.offset ?? 0;
     const limit = options.limit ?? list.length;
     return list.slice(offset, offset + limit).map(clone);
@@ -178,6 +186,8 @@ export class InMemoryGatewayStore {
     let list = [...this.templates.values()].sort((a, b) => new Date(b.createdAt ?? 0) - new Date(a.createdAt ?? 0));
     if (options.tenantId) list = list.filter((t) => t.tenantId === options.tenantId);
     if (options.projectId) list = list.filter((t) => t.projectId === options.projectId);
+    if (options.tenantIds?.length) list = list.filter(s => options.tenantIds.includes(s.tenantId));
+    if (options.projectIds?.length) list = list.filter(s => options.projectIds.includes(s.projectId));
     const offset = options.offset ?? 0;
     const limit = options.limit ?? list.length;
     return list.slice(offset, offset + limit).map(clone);
@@ -211,14 +221,15 @@ export class InMemoryGatewayStore {
     if (options.outcome) list = list.filter((r) => r.outcome === options.outcome);
     if (options.tenantId) list = list.filter((r) => r.tenantId === options.tenantId);
     if (options.projectId) list = list.filter((r) => r.projectId === options.projectId);
+    list = list.filter(record => matchesScope(record, options));
     const offset = options.offset ?? 0;
     const limit = options.limit ?? 50;
     return list.slice(offset, offset + limit).map(clone);
   }
 
-  getOverview() {
-    const jobs = [...this.jobs.values()];
-    const sessions = [...this.sessions.values()];
+  getOverview(options = {}) {
+    const jobs = [...this.jobs.values()].filter(r => matchesScope(r, options));
+    const sessions = [...this.sessions.values()].filter(r => matchesScope(r, options));
     const jobsByState = {};
     for (const job of jobs) {
       jobsByState[job.state] = (jobsByState[job.state] ?? 0) + 1;
@@ -238,8 +249,8 @@ export class InMemoryGatewayStore {
         active: (sessionsByState.ready ?? 0) + (sessionsByState.busy ?? 0) + (sessionsByState.provisioning ?? 0),
         byState: sessionsByState,
       },
-      auditRecordsCount: this.auditRecords.length,
-      idempotencyKeysCount: this.idempotencyKeys.size,
+      auditRecordsCount: this.auditRecords.filter(r => matchesScope(r, options)).length,
+      idempotencyKeysCount: [...this.idempotencyKeys.values()].filter(r => matchesScope(r, options)).length,
     };
   }
 }
@@ -249,4 +260,8 @@ function clone(value) {
     return value ?? null;
   }
   return structuredClone(value);
+}
+
+function matchesScope(record, { tenantIds, projectIds }) {
+  return (!tenantIds?.length || tenantIds.includes(record.tenantId)) && (!projectIds?.length || projectIds.includes(record.projectId));
 }

@@ -1,6 +1,5 @@
 import { workspaceFileCommand, parseWorkspaceResult, localWorkspaceFileOperation } from '../mcp/file-operation.js';
 import { randomUUID } from 'node:crypto';
-import { EventEmitter } from 'node:events';
 import { cp, mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -17,39 +16,6 @@ import {
 } from '../core/provider-contract.js';
 import { PROVIDER_CAPABILITIES, SandboxCapability } from '../core/e2b-protocol-adapter.js';
 import { CubeSandboxClient } from './cubesandbox-client.js';
-
-export class RemotePtySession extends EventEmitter {
-  constructor({ client, sessionId, command = '/bin/sh', cols = 80, rows = 24 } = {}) {
-    super();
-    this.client = client;
-    this.sessionId = sessionId;
-    this.command = command;
-    this.cols = cols;
-    this.rows = rows;
-    this.isReady = true;
-    this.closed = false;
-
-    queueMicrotask(() => {
-      this.emit('ready');
-    });
-  }
-
-  write(data) {
-    if (this.closed) return;
-    this.emit('data', data);
-  }
-
-  resize(cols, rows) {
-    this.cols = cols;
-    this.rows = rows;
-  }
-
-  kill() {
-    if (this.closed) return;
-    this.closed = true;
-    this.emit('close', 0);
-  }
-}
 
 /**
  * CubeSandboxProvider: MicroVM Provider implementing Sub-60ms cold start,
@@ -76,6 +42,13 @@ export class CubeSandboxProvider {
     this.activeJobSessions = new Map();
     this.sequence = 0;
     this.capabilities = new Set(PROVIDER_CAPABILITIES.cubesandbox);
+    if (this.mode === 'remote') {
+      for (const capability of [SandboxCapability.TerminalPty, SandboxCapability.MemorySnapshot,
+        SandboxCapability.InstantFork, SandboxCapability.StateRollback, SandboxCapability.Sub60msColdStart,
+        SandboxCapability.ProcessKill]) this.capabilities.delete(capability);
+    }
+    this.capabilityEvidence = { mode: this.mode, evidence: this.mode === 'remote' ? 'requires-live-validation' : 'simulated',
+      pty: this.mode === 'remote' ? 'unsupported' : 'local-process', cancellation: this.mode === 'remote' ? 'sandbox-destruction' : 'local-process-tree' };
     this.metrics = {
       coldStartCount: 0,
       totalColdStartDurationMs: 0,
@@ -128,9 +101,9 @@ export class CubeSandboxProvider {
 
       const coldStartMs = remoteSandbox.microVm?.coldStartMs ?? Number((performance.now() - startTime).toFixed(2));
       const microVmMeta = {
-        vmId: remoteSandbox.microVm?.vmId ?? `vm_${randomUUID().slice(0, 8)}`,
-        kernelVersion: remoteSandbox.microVm?.kernelVersion ?? '6.6.30-cube-microvm',
-        isolation: 'hardware_virtualization_kvm',
+        vmId: remoteSandbox.microVm?.vmId ?? remoteSandbox.id,
+        kernelVersion: remoteSandbox.microVm?.kernelVersion ?? null,
+        isolation: remoteSandbox.microVm?.isolation ?? 'unverified',
         coldStartMs,
         ...(request.snapshotId ? { restoredFromSnapshot: request.snapshotId } : {}),
       };
@@ -145,6 +118,8 @@ export class CubeSandboxProvider {
         executionMode: ExecutionMode.WorkspaceSession,
         provider: this.name,
         remote: true,
+        supportedCapabilities: this.supportedCapabilities,
+        capabilityEvidence: this.capabilityEvidence,
         microVm: microVmMeta,
         resources: remoteSandbox.resources ?? {
           vCpu: request.resources?.vCpu ?? 1,
@@ -191,6 +166,8 @@ export class CubeSandboxProvider {
       executionMode: ExecutionMode.WorkspaceSession,
       provider: this.name,
       workspacePath,
+      supportedCapabilities: this.supportedCapabilities,
+      capabilityEvidence: this.capabilityEvidence,
       microVm: microVmMeta,
       resources: {
         vCpu: request.resources?.vCpu ?? 1,
@@ -263,7 +240,7 @@ export class CubeSandboxProvider {
     }
 
     if (this.client && this.mode === 'remote') {
-      const snap = await this.client.createSnapshot(sessionId, { label });
+      const snap = await this.client.createSnapshot(session.providerSessionId ?? sessionId, { label });
       this.snapshots.set(snap.id, snap);
       this.metrics.snapshotCount += 1;
       return snap;
@@ -381,7 +358,7 @@ export class CubeSandboxProvider {
       throw new Error(`Session not found: ${sessionId}`);
     }
     if (this.client && this.mode === 'remote') {
-      return this.client.listWorkspaceTree(sessionId, options);
+      return this.client.listWorkspaceTree(session.providerSessionId ?? sessionId, options);
     }
     const { listWorkspaceTree } = await import('../workspaces/workspace-file-service.js');
     return listWorkspaceTree(session.workspacePath, options);
@@ -393,7 +370,7 @@ export class CubeSandboxProvider {
       throw new Error(`Session not found: ${sessionId}`);
     }
     if (this.client && this.mode === 'remote') {
-      return this.client.readWorkspaceFile(sessionId, filePath, options);
+      return this.client.readWorkspaceFile(session.providerSessionId ?? sessionId, filePath, options);
     }
     const { readWorkspaceFilePreview } = await import('../workspaces/workspace-file-service.js');
     return readWorkspaceFilePreview(session.workspacePath, filePath, options);
@@ -405,7 +382,7 @@ export class CubeSandboxProvider {
       throw new Error(`Session not found: ${sessionId}`);
     }
     if (this.client && this.mode === 'remote') {
-      const res = await this.client.readWorkspaceFile(sessionId, filePath);
+      const res = await this.client.readWorkspaceFile(session.providerSessionId ?? sessionId, filePath);
       return Readable.from(Buffer.from(res.content ?? ''));
     }
     const { createSingleFileDownloadStream } = await import('../workspaces/workspace-file-service.js');
@@ -418,7 +395,7 @@ export class CubeSandboxProvider {
       throw new Error(`Session not found: ${sessionId}`);
     }
     if (this.client && this.mode === 'remote') {
-      const archiveBuf = await this.client.downloadWorkspaceArchive(sessionId, options);
+      const archiveBuf = await this.client.downloadWorkspaceArchive(session.providerSessionId ?? sessionId, options);
       return Readable.from(archiveBuf);
     }
     const { createArchiveDownloadStream } = await import('../workspaces/workspace-file-service.js');
@@ -431,7 +408,7 @@ export class CubeSandboxProvider {
       throw new Error(`Session not found: ${sessionId}`);
     }
     if (this.client && this.mode === 'remote') {
-      return this.client.syncWorkspaceFiles(sessionId, files, options);
+      return this.client.syncWorkspaceFiles(session.providerSessionId ?? sessionId, files, options);
     }
     const { syncWorkspaceFiles } = await import('../workspaces/workspace-file-service.js');
     return syncWorkspaceFiles(session.workspacePath, files, options);
@@ -443,7 +420,7 @@ export class CubeSandboxProvider {
       throw new Error(`Session not found: ${sessionId}`);
     }
     if (this.client && this.mode === 'remote') {
-      return this.client.extractWorkspaceArchive(sessionId, archiveBuffer, options);
+      return this.client.extractWorkspaceArchive(session.providerSessionId ?? sessionId, archiveBuffer, options);
     }
     const { extractTarGzToWorkspace } = await import('../workspaces/workspace-file-service.js');
     return extractTarGzToWorkspace(session.workspacePath, archiveBuffer, options);
@@ -465,13 +442,7 @@ export class CubeSandboxProvider {
         rows: options.rows ?? 24,
       });
     }
-    return new RemotePtySession({
-      client: this.client,
-      sessionId,
-      command: options.command ?? '/bin/sh',
-      cols: options.cols ?? 80,
-      rows: options.rows ?? 24,
-    });
+    throw Object.assign(new Error('Remote CubeSandbox PTY is not implemented'), { statusCode: 501, code: 'UNSUPPORTED_CAPABILITY' });
   }
 
   /**

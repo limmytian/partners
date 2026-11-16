@@ -66,6 +66,8 @@ export class GatewayServiceAuthorizer {
       tokenRef: token.tokenRef,
       actor: token.actor,
       scopes: [...token.scopes],
+      tenantIds: [...token.tenantIds],
+      projectIds: [...token.projectIds],
       tenantId: tenantId ?? null,
       projectId: projectId ?? null,
     };

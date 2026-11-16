@@ -1,0 +1,30 @@
+{
+  "run": "8e1f1d59-2173-43dd-8b3e-c9883ddde2ec",
+  "startedAt": "2026-11-16T11:52:59.633Z",
+  "gatewayProcesses": 2,
+  "requests": 40,
+  "artifactBackend": "s3",
+  "jobId": "job_5b5423ae-748f-43ea-8e28-2d4e9455f0e2",
+  "providerStarts": 1,
+  "artifact": {
+    "id": "art_19e17408-0ce0-4850-a58f-01964fdd4b23",
+    "storageUri": "s3://partners-test/v015-validation/rest-live:8e1f1d59-2173-43dd-8b3e-c9883ddde2ec/job_5b5423ae-748f-43ea-8e28-2d4e9455f0e2/art_19e17408-0ce0-4850-a58f-01964fdd4b23/stdout.txt",
+    "downloadStatus": 200
+  },
+  "isolation": [
+    {
+      "boundary": "tenant",
+      "snapshotGet": 403,
+      "templateGet": 403,
+      "restore": 403
+    },
+    {
+      "boundary": "project",
+      "snapshotGet": 403,
+      "templateGet": 403,
+      "restore": 403
+    }
+  ],
+  "status": "passed",
+  "completedAt": "2026-11-16T11:53:01.073Z"
+}

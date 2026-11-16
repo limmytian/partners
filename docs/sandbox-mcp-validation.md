@@ -8,7 +8,7 @@ Final full-suite result with a fresh configured PostgreSQL database: **147 tests
 
 - MCP 2025-11-25 with pinned official SDK 1.31.0: HTTP initialize, ping, tool discovery, seven contracts, call results/errors, reconnection and background job polling.
 - Local HTTP end-to-end workspace → conditional Python file write → execution → paged Unicode output → file read/list → delete.
-- Authentication, tenant/project/scope rejection, forbidden Origin, oversized requests and unsupported version rejection. MCP host execution/simulation and memory coordination require an explicit development flag.
+- Authentication, tenant/project/scope rejection, forbidden Origin, oversized requests and initialize version negotiation and unsupported subsequent-header rejection. MCP host execution/simulation and memory coordination require an explicit development flag.
 - Persistent PostgreSQL: 40 competing reservations over independent connections produce one winner; 20 submissions through two Gateways start one actual provider job. A newly constructed service replays the accepted job. This test shares a Local runtime backend to measure Gateway/store coordination, not independent remote sandbox processes.
 - Concurrent schema initialization exposed a PostgreSQL DDL race; migration now uses transaction-scoped advisory locks. The full suite was rerun on a new UTF-8 database.
 - Unknown failures retain request reservations. Lost job ownership is diagnosed after the heartbeat window, quarantines the workspace and preserves the unknown verdict against late worker writes. Cancellation intent is persisted and checked before execution and by the owning worker.

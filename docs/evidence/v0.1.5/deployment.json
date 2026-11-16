@@ -1,0 +1,325 @@
+{
+  "context": "default",
+  "namespace": "cube-system",
+  "release": "cube",
+  "originalRevision": 1,
+  "originalChart": "cube-0.7.2",
+  "deployedRevision": 6,
+  "deployedChart": "cube-0.8.0",
+  "sourceTag": "v0.8.0",
+  "sourceCommit": "41748bb78d6384962b4e417ff9215720ea7472fd",
+  "maintenance": {
+    "gatewayPaused": "2026-11-16T11:15:19Z",
+    "gatewayResumed": "2026-11-16T11:27:30Z",
+    "timezone": "UTC",
+    "drainedSandboxes": 2,
+    "userConfirmedObsolete": true
+  },
+  "compute": {
+    "node": "dell-r730",
+    "healthy": true,
+    "schedulingDisabled": false,
+    "versions": [
+      {
+        "component": "cubelet",
+        "version": "v0.8.0",
+        "commit": "41748bb78d6384962b4e417ff9215720ea7472fd",
+        "build_time": "2026-11-12T14:30:48Z",
+        "source": "binary"
+      },
+      {
+        "component": "cubecli",
+        "version": "v0.8.0",
+        "source": "component-json"
+      },
+      {
+        "component": "cube-runtime",
+        "version": "v0.8.0",
+        "source": "component-json"
+      },
+      {
+        "component": "containerd-shim-cube-rs",
+        "version": "v0.8.0",
+        "source": "component-json"
+      },
+      {
+        "component": "guest-image",
+        "version": "guest-image-260820-1",
+        "source": "component-json"
+      },
+      {
+        "component": "cube-agent",
+        "version": "v0.8.0",
+        "source": "component-json"
+      },
+      {
+        "component": "cube-egress",
+        "version": "v0.8.0",
+        "commit": "41748bb78d6384962b4e417ff9215720ea7472fd",
+        "build_time": "2026-11-12T14:30:53Z",
+        "source": "component-json"
+      },
+      {
+        "component": "kernel",
+        "version": "sha256-665d550c5eed@sha256:665d550c5eedb5652259156501032a82f8a7b2d52cfbbfc506cce5dda9f64bdf",
+        "source": "component-json",
+        "variant": "bm"
+      }
+    ],
+    "hostFacts": {
+      "cpu_vendor": "GenuineIntel",
+      "cpu_model": "Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz",
+      "cpuid_hash": "sha256:cd24e06d8992341435aae91e696d38bd6a181baf6fb26451f2a0e31a77c56331",
+      "host_kernel_release": "7.0.0-38-generic",
+      "host_kernel_fingerprint": "sha256:c682efdd78bf542846db0900fa90a0f23f65a954cd634f7688b9bd7140bde938",
+      "kvm_api_version": 12,
+      "kvm_module_fingerprint": "sha256:c0227446a8a5004f8b4ffa60e6af686000b1e05446af52157e32563a7d9300b8",
+      "cpu_count": 80,
+      "mem_total_mb": 61964
+    }
+  },
+  "pods": [
+    {
+      "name": "cube-api-76c76ff59f-g8ggs",
+      "node": "dell-r730",
+      "hostNetwork": false,
+      "containers": [
+        {
+          "name": "cube-api",
+          "image": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cube-api:v0.8.0",
+          "imageID": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cube-api@sha256:fe09ff69fc311e654917a4799392b3734140315579132751bf5b50bc360754de",
+          "ready": true
+        }
+      ]
+    },
+    {
+      "name": "cube-cubemastercli-74c44d9d5-rqgpz",
+      "node": "dell-r730",
+      "hostNetwork": false,
+      "containers": [
+        {
+          "name": "cubemastercli",
+          "image": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cubemastercli:v0.8.0",
+          "imageID": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cubemastercli@sha256:030aa7c96bc3cf1d145a603896fb7800932a568e456928b63bdb18ae9ac5f0b4",
+          "ready": true
+        }
+      ]
+    },
+    {
+      "name": "cube-lifecycle-manager-586d959f49-jj5f8",
+      "node": "dell-r730",
+      "hostNetwork": false,
+      "containers": [
+        {
+          "name": "cube-lifecycle-manager",
+          "image": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cube-lifecycle-manager:v0.8.0",
+          "imageID": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cube-lifecycle-manager@sha256:8b616745bd32e0354f0f3543c4a186aaf92f0e2b3f18350c9d59429b3fa5afc4",
+          "ready": true
+        }
+      ]
+    },
+    {
+      "name": "cube-lifecycle-manager-586d959f49-v5rc4",
+      "node": "dell-r730",
+      "hostNetwork": false,
+      "containers": [
+        {
+          "name": "cube-lifecycle-manager",
+          "image": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cube-lifecycle-manager:v0.8.0",
+          "imageID": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cube-lifecycle-manager@sha256:8b616745bd32e0354f0f3543c4a186aaf92f0e2b3f18350c9d59429b3fa5afc4",
+          "ready": true
+        }
+      ]
+    },
+    {
+      "name": "cube-master-85c579766c-nbdwb",
+      "node": "dell-r730",
+      "hostNetwork": false,
+      "containers": [
+        {
+          "name": "cube-master",
+          "image": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cube-master:v0.8.0",
+          "imageID": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cube-master@sha256:10f9e19e6b69dd1b82861cce8544e990f7cb59f8df554c91b1d98dd67713a4b1",
+          "ready": true
+        }
+      ]
+    },
+    {
+      "name": "cube-minio-0",
+      "node": "dell-r730",
+      "hostNetwork": false,
+      "containers": [
+        {
+          "name": "minio",
+          "image": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/minio:RELEASE.2025-09-07T16-13-09Z",
+          "imageID": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/minio@sha256:37a173a1c3042bdbbd9904bd3ab7c4c7b17f607b268220a607a685c14d94d1cb",
+          "ready": true
+        }
+      ]
+    },
+    {
+      "name": "cube-mysql-0",
+      "node": "dell-r730",
+      "hostNetwork": false,
+      "containers": [
+        {
+          "name": "mysql",
+          "image": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/mysql:8.0",
+          "imageID": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/mysql@sha256:f9a3e6f8d4529dc79038d182efdb73cb7b17736dc95af4a129d8ac029cf2346b",
+          "ready": true
+        }
+      ]
+    },
+    {
+      "name": "cube-node-bootstrap-6ll2g",
+      "node": "dell-r730",
+      "hostNetwork": false,
+      "containers": [
+        {
+          "name": "write-node-prep-ready",
+          "image": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cube-wait-node-prep:v0.8.0",
+          "imageID": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cube-wait-node-prep@sha256:a361dcfb1976026ef82b76ac7f63f877063a4c36bc6edad3ae9d7e5f9d25f527",
+          "ready": true
+        }
+      ]
+    },
+    {
+      "name": "cube-node-installer-ddmxg",
+      "node": "dell-r730",
+      "hostNetwork": false,
+      "containers": [
+        {
+          "name": "cube-agent-install",
+          "image": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cube-agent:v0.8.0",
+          "imageID": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cube-agent@sha256:9c0d78f725f54e684cc289626d14f1cbf263bdf745951c603129e9ce8e4ef4ec",
+          "ready": true
+        },
+        {
+          "name": "cube-guest-install",
+          "image": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cube-guest:v0.8.0",
+          "imageID": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cube-guest@sha256:c9e0f8836fa40b58f52d6c274f8c714f5938d48f20708a2220205198cf231bda",
+          "ready": true
+        },
+        {
+          "name": "cube-kernel-install",
+          "image": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cube-kernel:v0.8.0",
+          "imageID": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cube-kernel@sha256:0a449d95680d33a80c079904603b9db978ff6e5370c5ec925bc25f699ecc70d8",
+          "ready": true
+        },
+        {
+          "name": "cube-shim-install",
+          "image": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cube-shim:v0.8.0",
+          "imageID": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cube-shim@sha256:5000b490d0504e188ca3f929fd2e748969479c077afa0fbd52d4049dff420bbb",
+          "ready": true
+        }
+      ]
+    },
+    {
+      "name": "cube-node-zm622",
+      "node": "dell-r730",
+      "hostNetwork": true,
+      "containers": [
+        {
+          "name": "cube-egress",
+          "image": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cube-egress:v0.8.0",
+          "imageID": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cube-egress@sha256:5389ae351a3758fc6f5739177bbd0dc5a63a4b035b64f74bf502c9c9fdcafd53",
+          "ready": true
+        },
+        {
+          "name": "cube-egress-net",
+          "image": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cube-egress-net:v0.8.0",
+          "imageID": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cube-egress-net@sha256:fd91ca6b8fb767010bb1a1363f43460ecb9818c1e67c67c105ee46843f4c8788",
+          "ready": true
+        },
+        {
+          "name": "cubelet",
+          "image": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cubelet:v0.8.0",
+          "imageID": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cubelet@sha256:e1e8f1225106906d6eeb683aa37c78a25e63956b660ececa79245539754f591d",
+          "ready": true
+        }
+      ]
+    },
+    {
+      "name": "cube-ops-655cb54b64-s7j9m",
+      "node": "dell-r730",
+      "hostNetwork": false,
+      "containers": [
+        {
+          "name": "cube-ops",
+          "image": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cube-ops:v0.8.0",
+          "imageID": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cube-ops@sha256:a25ba2ee190f3b9d75964f665fe43a944accc2c732998f2387ebde8b9e97d8b7",
+          "ready": true
+        }
+      ]
+    },
+    {
+      "name": "cube-ops-agent-xm5lm",
+      "node": "dell-r730",
+      "hostNetwork": true,
+      "containers": [
+        {
+          "name": "ops-agent",
+          "image": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cube-ops-agent:v0.8.0",
+          "imageID": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cube-ops-agent@sha256:0ae31092899c6b7e2b551250d011d9eed01e08cb3f25dea7da1c2525c0af921a",
+          "ready": true
+        }
+      ]
+    },
+    {
+      "name": "cube-proxy-8555568d8-kb256",
+      "node": "dell-r730",
+      "hostNetwork": false,
+      "containers": [
+        {
+          "name": "cube-proxy",
+          "image": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cube-proxy:v0.8.0",
+          "imageID": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cube-proxy@sha256:d602e9bf8b49fb590b97d5eb89e2f6534be428e3a2159b67e5d1701231354dc9",
+          "ready": true
+        }
+      ]
+    },
+    {
+      "name": "cube-redis-0",
+      "node": "dell-r730",
+      "hostNetwork": false,
+      "containers": [
+        {
+          "name": "redis",
+          "image": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/redis:7-alpine",
+          "imageID": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/redis@sha256:b19e03b4b48b28e207b0f28f09bf49c99bd6d6eb6c32bd2f4d9188b7a1d04213",
+          "ready": true
+        }
+      ]
+    },
+    {
+      "name": "cube-templatecenter-567f8d686-t4j8h",
+      "node": "dell-r730",
+      "hostNetwork": false,
+      "containers": [
+        {
+          "name": "cube-templatecenter",
+          "image": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cube-templatecenter:v0.8.0",
+          "imageID": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cube-templatecenter@sha256:9cb8bd997ae4df3604cc6c2283f362b6d5b2a9c7b63492d9ad0ea5744535326f",
+          "ready": true
+        }
+      ]
+    },
+    {
+      "name": "cube-webui-bdd86548b-g5wmt",
+      "node": "dell-r730",
+      "hostNetwork": false,
+      "containers": [
+        {
+          "name": "webui",
+          "image": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cube-webui:v0.8.0",
+          "imageID": "cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/cube-webui@sha256:e83f353c969f68106dfd0d10ee6b25901dd0e30d0171cdd7380a3aada7b6eca4",
+          "ready": true
+        }
+      ]
+    }
+  ],
+  "partnersApplication": "v0.1.4 unchanged; resumed and remote MCP/S3 probe passed",
+  "storageMigration": false,
+  "hostKernelSwitch": false,
+  "majorDependencyUpgrade": false
+}

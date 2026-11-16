@@ -28,3 +28,53 @@ jobs:
 
       - name: Run tests
         run: npm test
+
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: partners_test
+          POSTGRES_USER: partners
+          POSTGRES_PASSWORD: partners-test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U partners -d partners_test"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      POSTGRES_URL: postgres://partners:partners-test@127.0.0.1:5432/partners_test
+      MCP_TEST_POSTGRES_URL: postgres://partners:partners-test@127.0.0.1:5432/partners_test
+      S3_ENDPOINT: http://127.0.0.1:9000
+      S3_BUCKET: partners-test
+      S3_ACCESS_KEY_ID: partners
+      S3_SECRET_ACCESS_KEY: partners-test-secret
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+      - run: npm ci
+      - name: Start isolated MinIO and create test bucket
+        run: |
+          docker network create partners-test
+          for i in 1 2 3; do
+            if docker pull cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/minio:RELEASE.2025-09-07T16-13-09Z@sha256:37a173a1c3042bdbbd9904bd3ab7c4c7b17f607b268220a607a685c14d94d1cb; then break; fi
+          done
+          docker image inspect cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/minio:RELEASE.2025-09-07T16-13-09Z@sha256:37a173a1c3042bdbbd9904bd3ab7c4c7b17f607b268220a607a685c14d94d1cb >/dev/null
+          docker run -d --name minio --network partners-test -p 9000:9000 \
+            -e MINIO_ROOT_USER=partners -e MINIO_ROOT_PASSWORD=partners-test-secret \
+            cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/minio:RELEASE.2025-09-07T16-13-09Z@sha256:37a173a1c3042bdbbd9904bd3ab7c4c7b17f607b268220a607a685c14d94d1cb server /data
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:9000/minio/health/ready; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:9000/minio/health/ready
+          curl -fsS --aws-sigv4 'aws:amz:us-east-1:s3' \
+            --user 'partners:partners-test-secret' -X PUT http://127.0.0.1:9000/partners-test
+      - name: Run persistence, concurrency, restart and S3 tests without skips
+        run: npm run test:integration
+      - name: Show service diagnostics on failure
+        if: failure()
+        run: docker logs minio

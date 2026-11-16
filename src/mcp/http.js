@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { MCP_PROTOCOL_VERSION, MCP_LIMITS, listMcpTools } from './contract.js';
+import { ListToolsRequestSchema, CallToolRequestSchema, SUPPORTED_PROTOCOL_VERSIONS } from '@modelcontextprotocol/sdk/types.js';
+import { MCP_LIMITS, listMcpTools } from './contract.js';
 
 export function createMcpHandler({ service, allowedOrigins = [], maxRequestBytes = MCP_LIMITS.requestBytes }) {
   const origins = new Set(allowedOrigins);
@@ -25,8 +25,11 @@ export function createMcpHandler({ service, allowedOrigins = [], maxRequestBytes
     let body;
     try { body = await readBody(req, maxRequestBytes); }
     catch (error) { return reply(res, error.statusCode ?? 400, 'INVALID_ARGUMENT', traceId); }
-    const version = body?.method === 'initialize' ? body.params?.protocolVersion : req.headers['mcp-protocol-version'];
-    if (version !== MCP_PROTOCOL_VERSION || (req.headers['mcp-protocol-version'] && req.headers['mcp-protocol-version'] !== MCP_PROTOCOL_VERSION)) {
+    // Initialize negotiates versions through the SDK. A client may offer a
+    // newer version and accept our supported fallback; reject unknown versions
+    // only on subsequent requests. Missing headers use the SDK's HTTP default.
+    const version = req.headers['mcp-protocol-version'];
+    if (body?.method !== 'initialize' && version && !SUPPORTED_PROTOCOL_VERSIONS.includes(version)) {
       return reply(res, 400, 'UNSUPPORTED_PROTOCOL_VERSION', traceId);
     }
     const server = new Server({ name: 'partners-sandbox', version: '0.1.0' }, { capabilities: { tools: {} } });

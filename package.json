@@ -1,6 +1,6 @@
 {
   "name": "partners",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Provider-agnostic execution gateway and sandboxes for AI agents",
   "license": "Apache-2.0",
   "author": "limmytian <limmytian@gmail.com>",
@@ -20,7 +20,8 @@
     "console:service": "node console/server.mjs",
     "test": "node --test",
     "mcp:smoke": "node scripts/mcp-smoke.mjs",
-    "mcp:validate-live": "node scripts/mcp-live-validation.mjs"
+    "mcp:validate-live": "node scripts/mcp-live-validation.mjs",
+    "test:integration": "node scripts/integration-check.mjs"
   },
   "engines": {
     "node": ">=20"

@@ -7,6 +7,7 @@ import {
   assertExecutionJobRequest,
   createEvent,
 } from '../core/provider-contract.js';
+import { gatewayCoordinator, hash } from '../mcp/coordination.js';
 import { InMemoryGatewayStore } from './gateway-store.js';
 import {
   IdempotencyScope,
@@ -37,6 +38,23 @@ export class InMemoryAgentExecutionGateway {
   }
 
   async createSession(request = {}) {
+    if (!request.id) return this.#provisionSession(request);
+
+    const coordinator = await this.#getCoordinator();
+    const key = 'session-create:' + request.id;
+    const { acquired, record } = await coordinator.claim(key, '', { state: 'pending' });
+    if (!acquired) throw Object.assign(new Error('Session ID is already in use'), { statusCode: 409 });
+    try {
+      if (await this.store.getSession(request.id)) {
+        throw Object.assign(new Error('Session ID is already in use'), { statusCode: 409 });
+      }
+      return await this.#provisionSession(request);
+    } finally {
+      await coordinator.release(key, record.owner);
+    }
+  }
+
+  async #provisionSession(request) {
     if (!this.provider.createSession) {
       throw new Error('Configured provider does not support sessions');
     }
@@ -51,9 +69,15 @@ export class InMemoryAgentExecutionGateway {
       if (!template) {
         throw Object.assign(new Error(`Template not found: ${templateId}`), { statusCode: 404 });
       }
+      assertSameScope(request, template);
       snapshotId = template.snapshotId;
     }
 
+    if (snapshotId) {
+      const snapshot = await this.store.getSnapshot(snapshotId);
+      if (!snapshot) throw Object.assign(new Error('Snapshot has no trusted ownership'), { statusCode: 403 });
+      assertSameScope(request, snapshot);
+    }
     const providerRequest = {
       ...request,
       ...(snapshotId ? { snapshotId } : {}),
@@ -110,9 +134,7 @@ export class InMemoryAgentExecutionGateway {
   async getSnapshot(snapshotId) {
     const stored = await this.store.getSnapshot(snapshotId);
     if (stored) return stored;
-    if (this.provider.getSnapshot) {
-      return this.provider.getSnapshot(snapshotId);
-    }
+
     return null;
   }
 
@@ -132,6 +154,7 @@ export class InMemoryAgentExecutionGateway {
       throw Object.assign(new Error(`Snapshot not found: ${snapshotId}`), { statusCode: 404 });
     }
 
+    assertSameScope({ tenantId, projectId }, snapshot);
     const templateId = `tpl_${randomUUID()}`;
     const now = this.#now();
     const record = {
@@ -258,7 +281,7 @@ export class InMemoryAgentExecutionGateway {
     return this.provider.createPtySession(sessionId, options);
   }
 
-  async runJob(request, onEvent = () => {}) {
+  async runJob(request, onEvent = () => {}, { insertOnly = false, submissionOwner = null } = {}) {
     assertExecutionJobRequest(request);
     if (request.executionMode === 'workspace_session' && this.provider.restoreSession) {
       const storedSession = await this.store.getSession(request.sessionId);
@@ -270,6 +293,7 @@ export class InMemoryAgentExecutionGateway {
     const now = this.#now();
     const job = {
       id: jobId,
+      ...(submissionOwner ? { submissionOwner } : {}),
       state: JobState.Queued,
       executionMode: providerRequest.executionMode,
       tenantId: providerRequest.tenantId ?? null,
@@ -289,7 +313,7 @@ export class InMemoryAgentExecutionGateway {
       actor: providerRequest.actor ?? null,
     };
 
-    await this.store.saveJob(job);
+    await this.store.saveJob(job, { insertOnly });
     await this.store.initializeJobBuckets(jobId);
     this.metrics?.recordJobStarted?.({
       executionMode: job.executionMode,
@@ -352,8 +376,52 @@ export class InMemoryAgentExecutionGateway {
     }
   }
 
-  async createJob(request, onEvent = () => {}) {
-    return this.runJob(request, onEvent);
+  async createJob(request, onEvent = () => {}, { submissionOwner = null } = {}) {
+    return this.runJob(request, onEvent, { insertOnly: true, submissionOwner });
+  }
+
+  async #getCoordinator() {
+    const coordinator = gatewayCoordinator(this.store);
+    this.coordinationReady ??= coordinator.migrate().catch(error => {
+      this.coordinationReady = null;
+      throw error;
+    });
+    await this.coordinationReady;
+    return coordinator;
+  }
+
+  async reserveJobSubmission({ idempotencyKey, request }) {
+    const now = this.#now();
+    const context = createIdempotencyContext({ idempotencyKey, scope: IdempotencyScope.JobsCreate, request, now });
+    const coordinator = await this.#getCoordinator();
+    const key = 'rest:' + context.storeKey;
+    const requestHash = hash(request);
+    let existing = await coordinator.get(key);
+    if (!existing) {
+      const legacy = await this.getJobIdempotencyRecord({ idempotencyKey, request, now });
+      if (legacy) {
+        // New submissions also write a legacy receipt for admin views. Prefer
+        // their full-request digest over the legacy digest with secret fields removed.
+        existing = await coordinator.get(key);
+        if (!existing) {
+          if (!legacy.matchesRequest) throw idempotencyConflict();
+          return { acquired: false, record: legacy };
+        }
+      }
+    }
+    if (!existing) assertExecutionJobRequest(request);
+    const resourceId = request.id ?? `job_${randomUUID()}`;
+    const responseBody = { id: resourceId, state: JobState.Queued, executionMode: request.executionMode,
+      tenantId: request.tenantId ?? null, projectId: request.projectId ?? null, sessionId: request.sessionId ?? null,
+      provider: this.provider.name, createdAt: context.createdAt };
+    const result = existing ? { acquired: false, record: existing } : await coordinator.claim(key, requestHash, {
+      state: 'accepted', resourceId, responseBody, statusCode: 202, expiresAt: context.expiresAt,
+      createdAt: context.createdAt, scope: context.scope, tenantId: context.tenantId, projectId: context.projectId,
+    });
+    if (!result.record) throw Object.assign(new Error('Submission state unavailable; retry with the same key'), { statusCode: 503 });
+    if (result.record.requestHash !== requestHash) throw idempotencyConflict();
+    if (isIdempotencyRecordExpired(result.record, this.#now())) throw Object.assign(new Error('Idempotency-Key expired; inspect the original job before using a new key'), { statusCode: 409 });
+    return result;
   }
 
   async saveJobIdempotencyRecord({
@@ -407,8 +475,8 @@ export class InMemoryAgentExecutionGateway {
     return this.store.listIdempotencyKeys?.(options) ?? [];
   }
 
-  async getOverview() {
-    const overview = (await this.store.getOverview?.()) ?? {};
+  async getOverview(options = {}) {
+    const overview = (await this.store.getOverview?.(options)) ?? {};
     return {
       ...overview,
       uptimeSeconds: Math.floor(process.uptime()),
@@ -575,4 +643,14 @@ function durationMs(startedAt, completedAt) {
     return 0;
   }
   return completed - started;
+}
+
+function idempotencyConflict() {
+  return Object.assign(new Error('Idempotency-Key has already been used with a different request body'), { statusCode: 409 });
+}
+
+function assertSameScope(request, source) {
+  for (const field of ['tenantId', 'projectId']) {
+    if ((request[field] ?? null) !== (source[field] ?? null)) throw Object.assign(new Error('Source scope mismatch'), { statusCode: 403 });
+  }
 }

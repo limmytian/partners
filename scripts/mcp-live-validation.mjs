@@ -14,7 +14,7 @@ if (!CUBESANDBOX_ENDPOINT || !CUBESANDBOX_PROXY_ENDPOINT || !MCP_TEST_POSTGRES_U
 const run = randomUUID(), tenant = `mcp-live:${run}`, token = randomUUID();
 const root = await mkdtemp(path.join(tmpdir(), 'partners-mcp-live-'));
 const store = new PostgresGatewayStore({ connectionString: MCP_TEST_POSTGRES_URL }); await store.migrate();
-const evidence = { run, protocol: '2025-11-25', startedAt: new Date().toISOString(), cases: [], root };
+const evidence = { artifactBackend: process.env.S3_ENDPOINT ? 's3' : 'local', run, protocol: '2025-11-25', startedAt: new Date().toISOString(), cases: [], root };
 const remoteIds = new Set(); const clients = []; const processes = [];
 let gateway;
 const delay = ms => new Promise(r => setTimeout(r, ms));
@@ -36,6 +36,7 @@ async function start() {
     GATEWAY_SERVICE_TOKEN: token, GATEWAY_SERVICE_TOKEN_REF: `live:${run}`, GATEWAY_TENANT_IDS: tenant, GATEWAY_PROJECT_IDS: 'partners',
     GATEWAY_SERVICE_SCOPES: 'sessions:create,sessions:read,sessions:write,sessions:delete,jobs:create,jobs:read,jobs:cancel,artifacts:read',
     GATEWAY_WORK_ROOT: root, GATEWAY_ARTIFACT_ROOT: path.join(root, 'artifacts'),
+    ...(process.env.S3_ENDPOINT ? Object.fromEntries(['S3_ENDPOINT','S3_BUCKET','S3_REGION','S3_ACCESS_KEY_ID','S3_SECRET_ACCESS_KEY'].filter(k => process.env[k]).map(k => [k,process.env[k]]).concat([['GATEWAY_ARTIFACT_STORE','s3'],['S3_PREFIX',`v015-validation/${run}`]])) : {}),
   }, stdio: ['ignore', 'pipe', 'pipe'] }); processes.push(child);
   let errorLog = ''; child.stderr.on('data', data => { errorLog += data; });
   const port = await new Promise((resolve, reject) => {

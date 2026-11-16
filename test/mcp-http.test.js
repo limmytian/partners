@@ -40,7 +40,15 @@ test('transport rejects token, Origin, protocol version and oversized requests',
   assert.equal((await fetch(f.url)).status, 401);
   const headers = { Authorization: 'Bearer full', 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' };
   assert.equal((await fetch(f.url, { method: 'POST', headers: { ...headers, Origin: 'https://evil.example' }, body: '{}' })).status, 403);
-  assert.equal((await fetch(f.url, { method: 'POST', headers, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2026-07-28' } }) })).status, 400);
+  for (const version of ['2025-03-26', '2025-06-18', '2025-11-25', '2026-07-28']) {
+    const initialized = await fetch(f.url, { method: 'POST', headers, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize',
+      params: { protocolVersion: version, capabilities: {}, clientInfo: { name: 'standard-agent', version: '1' } } }) });
+    assert.equal(initialized.status, 200);
+    const response = await initialized.json();
+    assert.equal(response.result.protocolVersion, version === '2026-07-28' ? '2025-11-25' : version);
+  }
+  assert.equal((await fetch(f.url, { method: 'POST', headers: { ...headers, 'MCP-Protocol-Version': '2026-07-28' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list' }) })).status, 400);
   assert.equal((await fetch(f.url, { method: 'POST', headers, body: 'x'.repeat(1048577) })).status, 413);
   assert.equal((await fetch(f.url, { headers: { Authorization: 'Bearer full' } })).status, 405);
 });
