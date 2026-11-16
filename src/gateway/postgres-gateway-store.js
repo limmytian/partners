@@ -5,6 +5,14 @@ import { hashGatewayServiceToken } from '../security/gateway-service-auth.js';
 
 export const POSTGRES_GATEWAY_SCHEMA = `
 CREATE SEQUENCE IF NOT EXISTS gateway_event_sequence;
+CREATE TABLE IF NOT EXISTS gateway_workspace_sources (
+  kind text NOT NULL, id text NOT NULL, tenant_id text, project_id text,
+  session_id text, created_at timestamptz NOT NULL, record jsonb NOT NULL,
+  PRIMARY KEY(kind, id)
+);
+CREATE INDEX IF NOT EXISTS gateway_workspace_sources_scope_idx
+  ON gateway_workspace_sources(kind, tenant_id, project_id, created_at DESC);
+
 
 CREATE TABLE IF NOT EXISTS gateway_sessions (
   id text PRIMARY KEY,
@@ -163,6 +171,35 @@ export class PostgresGatewayStore {
 
   async migrate() {
     await this.#execute([{ name: 'migrate', sql: "BEGIN; SELECT pg_advisory_xact_lock(hashtext('partners_gateway_schema'));\n" + POSTGRES_GATEWAY_SCHEMA + '\nCOMMIT;' }]);
+  }
+
+  async saveSnapshot(record) { return this.saveWorkspaceSource('snapshot', record); }
+  async saveTemplate(record) { return this.saveWorkspaceSource('template', record); }
+  async getSnapshot(id) { return this.getWorkspaceSource('snapshot', id); }
+  async getTemplate(id) { return this.getWorkspaceSource('template', id); }
+  async listSnapshots(options = {}) { return this.listWorkspaceSources('snapshot', options); }
+  async listTemplates(options = {}) { return this.listWorkspaceSources('template', options); }
+  async saveWorkspaceSource(kind, record) {
+    const result = await this.#single({ name: 'saveWorkspaceSource', sql: `INSERT INTO gateway_workspace_sources
+      (kind,id,tenant_id,project_id,session_id,created_at,record) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb)
+      ON CONFLICT(kind,id) DO UPDATE SET tenant_id=EXCLUDED.tenant_id, project_id=EXCLUDED.project_id, session_id=EXCLUDED.session_id, record=EXCLUDED.record RETURNING record`,
+      values: [kind, record.id, record.tenantId ?? null, record.projectId ?? null, record.sessionId ?? null, record.createdAt, json(record)] });
+    return clone(result.rows[0].record);
+  }
+  async getWorkspaceSource(kind, id) {
+    return this.#recordOrNull({ name: 'getWorkspaceSource', sql: 'SELECT record FROM gateway_workspace_sources WHERE kind=$1 AND id=$2', values: [kind,id] });
+  }
+  async listWorkspaceSources(kind, options) {
+    const values = [kind], conditions = ['kind=$1'];
+    for (const [field,column] of [['tenantId','tenant_id'],['projectId','project_id'],['sessionId','session_id']]) {
+      if (options[field]) { values.push(options[field]); conditions.push(`${column}=$${values.length}`); }
+    }
+    for (const [field,column] of [['tenantIds','tenant_id'],['projectIds','project_id']]) {
+      if (options[field]?.length) { values.push(options[field]); conditions.push(`${column}=ANY($${values.length}::text[])`); }
+    }
+    values.push(options.limit ?? 50, options.offset ?? 0);
+    const result = await this.#single({ name: 'listWorkspaceSources', sql: `SELECT record FROM gateway_workspace_sources WHERE ${conditions.join(' AND ')} ORDER BY created_at DESC,id LIMIT $${values.length-1} OFFSET $${values.length}`, values });
+    return result.rows.map(row => clone(row.record));
   }
 
   async nextEventSequence() {

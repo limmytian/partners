@@ -20,7 +20,8 @@
     "console:service": "node console/server.mjs",
     "test": "node --test",
     "mcp:smoke": "node scripts/mcp-smoke.mjs",
-    "mcp:validate-live": "node scripts/mcp-live-validation.mjs"
+    "mcp:validate-live": "node scripts/mcp-live-validation.mjs",
+    "test:integration": "node scripts/test-integration.mjs"
   },
   "engines": {
     "node": ">=20"

@@ -7,6 +7,7 @@ import {
   assertExecutionJobRequest,
   createEvent,
 } from '../core/provider-contract.js';
+import { gatewayCoordinator } from '../mcp/coordination.js';
 import { InMemoryGatewayStore } from './gateway-store.js';
 import {
   IdempotencyScope,
@@ -51,9 +52,15 @@ export class InMemoryAgentExecutionGateway {
       if (!template) {
         throw Object.assign(new Error(`Template not found: ${templateId}`), { statusCode: 404 });
       }
+      assertSameScope(request, template);
       snapshotId = template.snapshotId;
     }
 
+    if (snapshotId) {
+      const snapshot = await this.store.getSnapshot(snapshotId);
+      if (!snapshot) throw Object.assign(new Error('Snapshot has no trusted ownership'), { statusCode: 403 });
+      assertSameScope(request, snapshot);
+    }
     const providerRequest = {
       ...request,
       ...(snapshotId ? { snapshotId } : {}),
@@ -110,9 +117,7 @@ export class InMemoryAgentExecutionGateway {
   async getSnapshot(snapshotId) {
     const stored = await this.store.getSnapshot(snapshotId);
     if (stored) return stored;
-    if (this.provider.getSnapshot) {
-      return this.provider.getSnapshot(snapshotId);
-    }
+
     return null;
   }
 
@@ -132,6 +137,7 @@ export class InMemoryAgentExecutionGateway {
       throw Object.assign(new Error(`Snapshot not found: ${snapshotId}`), { statusCode: 404 });
     }
 
+    assertSameScope({ tenantId, projectId }, snapshot);
     const templateId = `tpl_${randomUUID()}`;
     const now = this.#now();
     const record = {
@@ -356,6 +362,26 @@ export class InMemoryAgentExecutionGateway {
     return this.runJob(request, onEvent);
   }
 
+  async reserveJobSubmission({ idempotencyKey, request }) {
+    assertExecutionJobRequest(request);
+    const context = createIdempotencyContext({ idempotencyKey, scope: IdempotencyScope.JobsCreate, request, now: this.#now() });
+    const coordinator = gatewayCoordinator(this.store);
+    this.coordinationReady ??= coordinator.migrate();
+    await this.coordinationReady;
+    const resourceId = request.id ?? `job_${randomUUID()}`;
+    const responseBody = { id: resourceId, state: JobState.Queued, executionMode: request.executionMode,
+      tenantId: request.tenantId ?? null, projectId: request.projectId ?? null, sessionId: request.sessionId ?? null,
+      provider: this.provider.name, createdAt: context.createdAt };
+    const result = await coordinator.claim('rest:' + context.storeKey, context.requestHash, {
+      state: 'accepted', resourceId, responseBody, statusCode: 202, expiresAt: context.expiresAt,
+      createdAt: context.createdAt, scope: context.scope, tenantId: context.tenantId, projectId: context.projectId,
+    });
+    if (!result.record) throw Object.assign(new Error('Submission state unavailable; retry with the same key'), { statusCode: 503 });
+    if (result.record.requestHash !== context.requestHash) throw Object.assign(new Error('Idempotency-Key has already been used with a different request body'), { statusCode: 409 });
+    if (isIdempotencyRecordExpired(result.record, this.#now())) throw Object.assign(new Error('Idempotency-Key expired; inspect the original job before using a new key'), { statusCode: 409 });
+    return result;
+  }
+
   async saveJobIdempotencyRecord({
     idempotencyKey,
     request,
@@ -575,4 +601,10 @@ function durationMs(startedAt, completedAt) {
     return 0;
   }
   return completed - started;
+}
+
+function assertSameScope(request, source) {
+  for (const field of ['tenantId', 'projectId']) {
+    if ((request[field] ?? null) !== (source[field] ?? null)) throw Object.assign(new Error('Source scope mismatch'), { statusCode: 403 });
+  }
 }

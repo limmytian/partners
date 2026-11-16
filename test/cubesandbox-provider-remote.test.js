@@ -148,16 +148,10 @@ test('CubeSandboxProvider (Remote): workspace file operations and PTY session ov
     const extractRes = await provider.extractWorkspaceArchive(session.id, archiveBuf);
     assert.equal(extractRes.extracted, true);
 
-    // PTY session
-    const pty = await provider.createPtySession(session.id, { cols: 100, rows: 40 });
-    assert.ok(pty);
-    assert.equal(pty.cols, 100);
-    assert.equal(pty.rows, 40);
-
-    let ptyClosed = false;
-    pty.on('close', () => { ptyClosed = true; });
-    pty.kill();
-    assert.equal(ptyClosed, true);
+    // Remote terminal capability must never be an input echo masquerading as a shell.
+    await assert.rejects(provider.createPtySession(session.id), { code: 'UNSUPPORTED_CAPABILITY', statusCode: 501 });
+    assert.equal(provider.supports('terminal.pty'), false);
+    assert.equal(provider.capabilityEvidence.mode, 'remote');
 
     await provider.deleteSession(session.id);
   } finally {

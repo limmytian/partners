@@ -116,7 +116,8 @@ export class CubeSandboxClient {
       if (err.status === 401 || err.status === 403) {
         throw err;
       }
-      return { version: 'v0.7.2', isolation: 'hardware_virtualization_kvm' };
+      if (![404, 405].includes(err.status)) throw err;
+      return { version: null, isolation: null, evidence: 'unavailable' };
     }
   }
 
@@ -133,6 +134,7 @@ export class CubeSandboxClient {
     } catch (err) {
       if (![404, 405].includes(err.status)) throw err;
       // Fall back to CubeAPI E2B-compatible route: POST /sandboxes with templateID
+      if (request.snapshotId) throw Object.assign(new Error('Remote snapshot restoration is not implemented for this endpoint'), { statusCode: 501, code: 'UNSUPPORTED_CAPABILITY' });
       const tpl = request.templateId ?? this.templateId;
       const res = await this.request('/sandboxes', {
         method: 'POST',
@@ -146,12 +148,7 @@ export class CubeSandboxClient {
         domain: res.domain,
         templateID: res.templateID,
         createdAt: new Date().toISOString(),
-        microVm: {
-          vmId: res.sandboxID,
-          kernelVersion: '6.6.1199-cube-microvm',
-          isolation: 'hardware_virtualization_kvm',
-          coldStartMs: 45,
-        },
+
       };
     }
   }
@@ -163,6 +160,7 @@ export class CubeSandboxClient {
         signal: options.signal,
       });
     } catch (err) {
+      if (![404, 405].includes(err.status)) throw err;
       const res = await this.request(`/sandboxes/${encodeURIComponent(sandboxId)}`, {
         method: 'GET',
         signal: options.signal,
@@ -183,6 +181,7 @@ export class CubeSandboxClient {
         signal: options.signal,
       });
     } catch (err) {
+      if (![404, 405].includes(err.status)) throw err;
       return await this.request(`/sandboxes/${encodeURIComponent(sandboxId)}`, {
         method: 'DELETE',
         signal: options.signal,
@@ -197,6 +196,7 @@ export class CubeSandboxClient {
         signal: options.signal,
       });
     } catch (err) {
+      if (![404, 405].includes(err.status)) throw err;
       return await this.request('/sandboxes', {
         method: 'GET',
         signal: options.signal,
@@ -362,12 +362,7 @@ export class CubeSandboxClient {
       method: 'POST',
       body: { label },
       signal: options.signal,
-    }).catch(() => ({
-      id: `cube_snap_${randomUUID().slice(0, 8)}`,
-      sandboxId,
-      label,
-      createdAt: new Date().toISOString(),
-    }));
+    });
   }
 
   async getSnapshot(snapshotId, options = {}) {
@@ -390,7 +385,7 @@ export class CubeSandboxClient {
       method: 'POST',
       body: request,
       signal: options.signal,
-    }).catch(async () => this.createSandbox(request, options));
+    });
   }
 
   // --- Workspace File Operations ---
@@ -402,8 +397,8 @@ export class CubeSandboxClient {
         method: 'GET',
         signal: options.signal,
       });
-    } catch {
-      return [];
+    } catch (error) {
+      throw Object.assign(new Error('Remote workspace tree is unavailable'), { statusCode: [404, 405].includes(error.status) ? 501 : error.status, cause: error });
     }
   }
 
@@ -414,9 +409,10 @@ export class CubeSandboxClient {
         method: 'GET',
         signal: options.signal,
       });
-    } catch {
+    } catch (error) {
+      if (![404, 405].includes(error.status)) throw error;
       // envd fallback
-      const text = await this.request(`/sandbox/${encodeURIComponent(sandboxId)}/49983/files?path=${encodeURIComponent(filePath)}`, {
+      const text = await this.request(`/sandbox/${encodeURIComponent(sandboxId)}/49983/files?path=${encodeURIComponent(filePath.startsWith('/') ? filePath : `/workspace/${filePath}`)}`, {
         method: 'GET',
         baseUrl: this.proxyEndpoint,
         headers: { 'Authorization': 'Basic cm9vdDo=' },
@@ -449,7 +445,8 @@ export class CubeSandboxClient {
         body: { files, overwrite },
         signal: options.signal,
       });
-    } catch {
+    } catch (error) {
+      if (![404, 405].includes(error.status)) throw error;
       // envd write file fallback
       const written = [];
       let totalBytes = 0;

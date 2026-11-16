@@ -160,6 +160,8 @@ export class InMemoryGatewayStore {
     if (options.tenantId) list = list.filter((s) => s.tenantId === options.tenantId);
     if (options.projectId) list = list.filter((s) => s.projectId === options.projectId);
     if (options.sessionId) list = list.filter((s) => s.sessionId === options.sessionId);
+    if (options.tenantIds?.length) list = list.filter(s => options.tenantIds.includes(s.tenantId));
+    if (options.projectIds?.length) list = list.filter(s => options.projectIds.includes(s.projectId));
     const offset = options.offset ?? 0;
     const limit = options.limit ?? list.length;
     return list.slice(offset, offset + limit).map(clone);
@@ -178,6 +180,8 @@ export class InMemoryGatewayStore {
     let list = [...this.templates.values()].sort((a, b) => new Date(b.createdAt ?? 0) - new Date(a.createdAt ?? 0));
     if (options.tenantId) list = list.filter((t) => t.tenantId === options.tenantId);
     if (options.projectId) list = list.filter((t) => t.projectId === options.projectId);
+    if (options.tenantIds?.length) list = list.filter(s => options.tenantIds.includes(s.tenantId));
+    if (options.projectIds?.length) list = list.filter(s => options.projectIds.includes(s.projectId));
     const offset = options.offset ?? 0;
     const limit = options.limit ?? list.length;
     return list.slice(offset, offset + limit).map(clone);

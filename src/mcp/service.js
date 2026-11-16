@@ -173,7 +173,8 @@ export class SandboxMcpService extends McpOperations {
   publicSession(session) {
     return { sessionId: session.id, state: session.state, expiresAt: session.metadata?.mcp?.expiresAt ?? null,
       quarantined: Boolean(session.metadata?.mcp?.quarantined),
-      capabilities: { bash_exec: true, file_ops: Boolean(this.gateway.provider.mcpFileOperation) }, limits: this.limits };
+      capabilities: { bash_exec: true, file_ops: Boolean(this.gateway.provider.mcpFileOperation),
+        ...(this.gateway.provider.capabilityEvidence ? { runtime: this.gateway.provider.capabilityEvidence } : {}) }, limits: this.limits };
   }
   publicJob(job) {
     return { jobId: job.id, sessionId: job.sessionId, state: job.state, exitCode: job.exitCode ?? null,

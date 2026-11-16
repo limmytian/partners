@@ -1,0 +1,348 @@
+{
+  "recordedAt": "2026-11-16",
+  "projectId": "b6da0fce-6f62-4746-b4db-2c1fbb78800e",
+  "repositoryId": "166d7134-1878-428a-8790-90c7b1a05e17",
+  "dryRun": false,
+  "summary": {
+    "requirements": {
+      "create": 1,
+      "reuse": 0
+    },
+    "tasks": {
+      "create": 6,
+      "reuse": 0
+    },
+    "slices": {
+      "create": 0
+    },
+    "documents": {
+      "create": 2,
+      "reuse": 0
+    },
+    "requirementDependencies": 0,
+    "taskDependencies": 6,
+    "documentLinks": 1,
+    "documentRequirementLinks": 2,
+    "documentTaskLinks": 8,
+    "taskComments": 0,
+    "taskNotes": 0
+  },
+  "refs": {
+    "requirements": [
+      {
+        "key": "v015",
+        "id": "d076dc47-28d7-4904-895a-a6854f36d283",
+        "existing": false,
+        "title": "Partners v0.1.5：执行隔离与幂等加固、CubeSandbox 兼容验收"
+      }
+    ],
+    "tasks": [
+      {
+        "key": "A",
+        "id": "66564d98-1160-4501-9179-cec9e9cce2a4",
+        "existing": false,
+        "title": "v0.1.5：修复快照、模板及派生工作区的租户/项目隔离"
+      },
+      {
+        "key": "B",
+        "id": "73759388-5f6c-46cf-aae7-05b494f69221",
+        "existing": false,
+        "title": "v0.1.5：为 REST 作业提交复用持久化原子幂等机制"
+      },
+      {
+        "key": "C",
+        "id": "db434068-cc71-40ff-bb7b-549399eb73be",
+        "existing": false,
+        "title": "v0.1.5：将 PostgreSQL / MinIO 集成验证纳入 CI"
+      },
+      {
+        "key": "D",
+        "id": "3599e786-6d10-41de-8f25-7556956efccc",
+        "existing": false,
+        "title": "v0.1.5：验证 CubeSandbox v0.8.0 并校准远端能力声明"
+      },
+      {
+        "key": "E",
+        "id": "baddf820-4482-452a-93cd-c7ad22755a4b",
+        "existing": false,
+        "title": "v0.1.5：限时核验保留工作区的进程取消能力"
+      },
+      {
+        "key": "F",
+        "id": "f8c221ca-f593-4eab-9f06-e3109a833ee4",
+        "existing": false,
+        "title": "v0.1.5：完成真实 MCP Agent 多轮工作区验收与发布准备"
+      }
+    ],
+    "slices": [],
+    "documents": [
+      {
+        "key": "iteration-plan",
+        "id": "a322c29c-7925-47e9-9e6f-8daf38ee3326",
+        "existing": false,
+        "title": "Partners v0.1.5：隔离、幂等与真实工作区验收计划"
+      },
+      {
+        "key": "cube-research",
+        "id": "d7a4bcf3-c2e4-4c84-ad40-5ced6387ab36",
+        "existing": false,
+        "title": "CubeSandbox 上游进展与 Partners 接入判断（2026-11-16）"
+      }
+    ]
+  },
+  "warnings": [
+    "New requirements remain draft and need approval before daemon execution."
+  ],
+  "workflows": [
+    {
+      "key": "v015",
+      "source": "explicit",
+      "workflow": {
+        "version": 1,
+        "worktreeMode": "auto",
+        "delivery": {
+          "mode": "automatic",
+          "method": "git_pr",
+          "instructions": ""
+        },
+        "acceptance": {
+          "mode": "automatic",
+          "instructions": "Review the delivered pull request changes and report any required corrections.",
+          "requiredChecks": [],
+          "minimumHumanApprovals": 0
+        },
+        "integration": {
+          "mode": "manual",
+          "method": "git_provider",
+          "instructions": ""
+        },
+        "localArtifactRetentionDays": 30,
+        "worktreeRetentionDays": 7
+      }
+    }
+  ],
+  "amendments": [
+    {
+      "date": "2026-11-16",
+      "reason": "用户要求将现有 Kubernetes CubeSandbox 实际升级纳入 v0.1.5",
+      "result": {
+        "dryRun": false,
+        "summary": {
+          "requirements": {
+            "create": 0,
+            "reuse": 1
+          },
+          "tasks": {
+            "create": 2,
+            "reuse": 6
+          },
+          "slices": {
+            "create": 0
+          },
+          "documents": {
+            "create": 1,
+            "reuse": 2
+          },
+          "requirementDependencies": 0,
+          "taskDependencies": 4,
+          "documentLinks": 1,
+          "documentRequirementLinks": 1,
+          "documentTaskLinks": 7,
+          "taskComments": 0,
+          "taskNotes": 0
+        },
+        "refs": {
+          "requirements": [
+            {
+              "key": "v015",
+              "id": "d076dc47-28d7-4904-895a-a6854f36d283",
+              "existing": true,
+              "title": "Partners v0.1.5：隔离与幂等加固、CubeSandbox 集群升级"
+            }
+          ],
+          "tasks": [
+            {
+              "key": "A",
+              "id": "66564d98-1160-4501-9179-cec9e9cce2a4",
+              "existing": true,
+              "title": "v0.1.5：修复快照、模板及派生工作区的租户/项目隔离"
+            },
+            {
+              "key": "B",
+              "id": "73759388-5f6c-46cf-aae7-05b494f69221",
+              "existing": true,
+              "title": "v0.1.5：为 REST 作业提交复用持久化原子幂等机制"
+            },
+            {
+              "key": "C",
+              "id": "db434068-cc71-40ff-bb7b-549399eb73be",
+              "existing": true,
+              "title": "v0.1.5：将 PostgreSQL / MinIO 集成验证纳入 CI"
+            },
+            {
+              "key": "D",
+              "id": "3599e786-6d10-41de-8f25-7556956efccc",
+              "existing": true,
+              "title": "v0.1.5：完成 CubeSandbox v0.8.0 升级前兼容适配"
+            },
+            {
+              "key": "E",
+              "id": "baddf820-4482-452a-93cd-c7ad22755a4b",
+              "existing": true,
+              "title": "v0.1.5：限时核验保留工作区的进程取消能力"
+            },
+            {
+              "key": "F",
+              "id": "f8c221ca-f593-4eab-9f06-e3109a833ee4",
+              "existing": true,
+              "title": "v0.1.5：完成真实 MCP Agent 多轮工作区验收与发布准备"
+            },
+            {
+              "key": "G",
+              "id": "fd6985b0-8c9c-48c4-9a4d-c18eab2f8f91",
+              "existing": false,
+              "title": "v0.1.5：完成 CubeSandbox 集群升级前盘点、备份与回退准备"
+            },
+            {
+              "key": "H",
+              "id": "fc83d647-7f73-4e60-9b5e-22e71b1c83a8",
+              "existing": false,
+              "title": "v0.1.5：将现有 Kubernetes CubeSandbox 升级至 v0.8.0 并回归"
+            }
+          ],
+          "slices": [],
+          "documents": [
+            {
+              "key": "iteration-plan",
+              "id": "a322c29c-7925-47e9-9e6f-8daf38ee3326",
+              "existing": true,
+              "title": "Partners v0.1.5：可靠性加固与 CubeSandbox 集群升级计划"
+            },
+            {
+              "key": "cube-research",
+              "id": "d7a4bcf3-c2e4-4c84-ad40-5ced6387ab36",
+              "existing": true,
+              "title": "CubeSandbox 上游进展与 Partners 接入判断（2026-11-16）"
+            },
+            {
+              "key": "cube-upgrade",
+              "id": "0aa288e1-3e1d-4578-af20-62f418f5d9c0",
+              "existing": false,
+              "title": "CubeSandbox Kubernetes v0.7.2 → v0.8.0 集群升级方案"
+            }
+          ]
+        },
+        "warnings": [],
+        "workflows": [
+          {
+            "key": "v015",
+            "source": "explicit",
+            "workflow": {
+              "version": 1,
+              "worktreeMode": "auto",
+              "delivery": {
+                "mode": "automatic",
+                "method": "git_pr",
+                "instructions": ""
+              },
+              "acceptance": {
+                "mode": "automatic",
+                "instructions": "Review the delivered pull request changes and report any required corrections.",
+                "requiredChecks": [],
+                "minimumHumanApprovals": 0
+              },
+              "integration": {
+                "mode": "manual",
+                "method": "git_provider",
+                "instructions": ""
+              },
+              "localArtifactRetentionDays": 30,
+              "worktreeRetentionDays": 7
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "currentRefs": {
+    "requirements": [
+      {
+        "key": "v015",
+        "id": "d076dc47-28d7-4904-895a-a6854f36d283",
+        "existing": true,
+        "title": "Partners v0.1.5：隔离与幂等加固、CubeSandbox 集群升级"
+      }
+    ],
+    "tasks": [
+      {
+        "key": "A",
+        "id": "66564d98-1160-4501-9179-cec9e9cce2a4",
+        "existing": true,
+        "title": "v0.1.5：修复快照、模板及派生工作区的租户/项目隔离"
+      },
+      {
+        "key": "B",
+        "id": "73759388-5f6c-46cf-aae7-05b494f69221",
+        "existing": true,
+        "title": "v0.1.5：为 REST 作业提交复用持久化原子幂等机制"
+      },
+      {
+        "key": "C",
+        "id": "db434068-cc71-40ff-bb7b-549399eb73be",
+        "existing": true,
+        "title": "v0.1.5：将 PostgreSQL / MinIO 集成验证纳入 CI"
+      },
+      {
+        "key": "D",
+        "id": "3599e786-6d10-41de-8f25-7556956efccc",
+        "existing": true,
+        "title": "v0.1.5：完成 CubeSandbox v0.8.0 升级前兼容适配"
+      },
+      {
+        "key": "E",
+        "id": "baddf820-4482-452a-93cd-c7ad22755a4b",
+        "existing": true,
+        "title": "v0.1.5：限时核验保留工作区的进程取消能力"
+      },
+      {
+        "key": "F",
+        "id": "f8c221ca-f593-4eab-9f06-e3109a833ee4",
+        "existing": true,
+        "title": "v0.1.5：完成真实 MCP Agent 多轮工作区验收与发布准备"
+      },
+      {
+        "key": "G",
+        "id": "fd6985b0-8c9c-48c4-9a4d-c18eab2f8f91",
+        "existing": false,
+        "title": "v0.1.5：完成 CubeSandbox 集群升级前盘点、备份与回退准备"
+      },
+      {
+        "key": "H",
+        "id": "fc83d647-7f73-4e60-9b5e-22e71b1c83a8",
+        "existing": false,
+        "title": "v0.1.5：将现有 Kubernetes CubeSandbox 升级至 v0.8.0 并回归"
+      }
+    ],
+    "slices": [],
+    "documents": [
+      {
+        "key": "iteration-plan",
+        "id": "a322c29c-7925-47e9-9e6f-8daf38ee3326",
+        "existing": true,
+        "title": "Partners v0.1.5：可靠性加固与 CubeSandbox 集群升级计划"
+      },
+      {
+        "key": "cube-research",
+        "id": "d7a4bcf3-c2e4-4c84-ad40-5ced6387ab36",
+        "existing": true,
+        "title": "CubeSandbox 上游进展与 Partners 接入判断（2026-11-16）"
+      },
+      {
+        "key": "cube-upgrade",
+        "id": "0aa288e1-3e1d-4578-af20-62f418f5d9c0",
+        "existing": false,
+        "title": "CubeSandbox Kubernetes v0.7.2 → v0.8.0 集群升级方案"
+      }
+    ]
+  }
+}

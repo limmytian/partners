@@ -258,3 +258,14 @@ quotas, and cross-process provider cancellation remain deferred.
 
 Service-token auth and tenant/project enforcement are documented in
 [gateway-service-auth.md](gateway-service-auth.md).
+
+
+## v0.1.5 isolation and durable REST submission
+
+Snapshot/template lists apply credential tenant/project grants before pagination. Explicit query scopes must also be authorized. Derived sessions/templates must remain in the source scope; Provider-only resources without trusted Gateway ownership cannot be restored. Single-scope tokens can omit creation scope (inferred from that grant); multiple-scope tokens must choose it explicitly. Snapshot creation always uses the stored session ownership, regardless of body fields.
+
+`POST /v1/jobs` with `Idempotency-Key` reserves a known job ID durably before Provider execution, using the same coordinator as MCP. Matching concurrent requests return the same original 202 acceptance body; different requests return 409. Poll the job endpoint for current state. After response loss or a process restart, retries never start a second Provider job. A replay whose reservation exists but job row is missing returns `Idempotency-Status: acceptance-uncertain` and the original known ID. Inspect that intent and remote execution evidence; automatic retries cannot establish whether an uncertain side effect occurred. No-key requests keep their previous behavior.
+
+New reservations expire after 24 hours but remain as tombstones: reuse after expiry returns 409 instead of silently starting work. The legacy replay table may still be cleaned by the existing retention job; it does not remove these coordinator tombstones. There is no automatic tombstone deletion in this release. Operators must reconcile unknown work before deliberately retiring records or using a new key. Old pre-upgrade records retain their prior TTL behavior.
+
+Remote CubeSandbox PTY is explicitly unsupported (501), and missing runtime versions are unknown. Simulator capabilities and remote adapter evidence are reported separately. This release continues to cancel remote jobs by confirming destruction of their sandbox; workspace-preserving process cancellation is not enabled.
