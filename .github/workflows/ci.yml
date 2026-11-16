@@ -59,6 +59,10 @@ jobs:
       - name: Start isolated MinIO and create test bucket
         run: |
           docker network create partners-test
+          for i in 1 2 3; do
+            if docker pull cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/minio:RELEASE.2025-09-07T16-13-09Z@sha256:37a173a1c3042bdbbd9904bd3ab7c4c7b17f607b268220a607a685c14d94d1cb; then break; fi
+          done
+          docker image inspect cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/minio:RELEASE.2025-09-07T16-13-09Z@sha256:37a173a1c3042bdbbd9904bd3ab7c4c7b17f607b268220a607a685c14d94d1cb >/dev/null
           docker run -d --name minio --network partners-test -p 9000:9000 \
             -e MINIO_ROOT_USER=partners -e MINIO_ROOT_PASSWORD=partners-test-secret \
             cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/minio:RELEASE.2025-09-07T16-13-09Z@sha256:37a173a1c3042bdbbd9904bd3ab7c4c7b17f607b268220a607a685c14d94d1cb server /data
